@@ -1,0 +1,2464 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<script>
+  window.addEventListener('error', function(e){
+    showErrBox((e.error && (e.error.stack||e.error.message)) || e.message || String(e));
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    var r = e.reason;
+    showErrBox('Promise rejection: ' + ((r && (r.stack||r.message)) || String(r)));
+  });
+  function showErrBox(text){
+    var el = document.getElementById('err-box');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'err-box';
+      el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#B5615B;color:#fff;padding:14px;font-size:13px;z-index:99999;white-space:pre-wrap;max-height:70vh;overflow:auto;font-family:monospace;';
+      document.body.appendChild(el);
+    }
+    var line = document.createElement('div');
+    line.style.marginBottom = '10px';
+    line.textContent = text;
+    el.appendChild(line);
+  }
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>我的資產</title>
+<style>
+  :root{
+    --bg:#F2EFEA;
+    --surface:#FFFFFF;
+    --ink:#3D3833;
+    --ink-soft:#8C8579;
+    --line:#E4DED4;
+    --income:#16A34A;
+    --income-soft:#DCFCE7;
+    --expense:#DC2626;
+    --expense-soft:#FEE2E2;
+    --accent:#C9B38B;
+    --warn:#B5615B;
+    --radius:16px;
+    --solid:#3D3833;
+    --field-bg:#FAF8F4;
+    --ghost-bg:#EFEAE2;
+  }
+  html.dark{
+    --bg:#1C1A17;
+    --surface:#262320;
+    --ink:#EDE8E0;
+    --ink-soft:#A89F92;
+    --line:#3A352F;
+    --income:#22C55E;
+    --income-soft:#15301F;
+    --expense:#EF4444;
+    --expense-soft:#3A1B1B;
+    --accent:#D4BC95;
+    --warn:#E5736B;
+    --field-bg:#2E2A25;
+    --ghost-bg:#332E28;
+  }
+  html.dark body{background:var(--bg);}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  @font-face{font-family:'CreamFont';src:url('./creamfont-3.3.otf') format('opentype');font-display:swap;font-style:normal;font-weight:normal;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:'CreamFont',-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+    font-style:normal;
+    -webkit-font-smoothing:antialiased;}
+  button{font-family:inherit;}
+  #root{min-height:100vh;padding-bottom:90px;}
+
+  .header{position:sticky;top:0;z-index:10;background:var(--bg);padding:18px 18px 8px;
+    display:flex;align-items:center;justify-content:space-between;}
+  .header h1{margin:0;font-size:21px;letter-spacing:.06em;font-weight:600;}
+  .theme-toggle{background:var(--surface);border:1px solid var(--line);border-radius:50%;
+    width:36px;height:36px;font-size:17px;flex-shrink:0;box-shadow:0 1px 3px rgba(60,50,40,.06);}
+
+  .month-switcher{display:flex;align-items:center;justify-content:center;gap:18px;
+    padding:6px 18px 14px;}
+  .month-switcher button{background:none;border:none;font-size:19px;color:var(--ink-soft);
+    width:32px;height:32px;border-radius:50%;}
+  .month-switcher button:active{background:var(--line);}
+  .month-switcher .label{font-size:17px;font-weight:600;min-width:110px;text-align:center;}
+  .month-switcher .label-btn{font-size:17px;font-weight:600;min-width:110px;text-align:center;
+    width:auto;height:auto;border-radius:8px;padding:4px 10px;color:var(--ink);}
+  .year-switcher{display:flex;align-items:center;justify-content:center;gap:18px;padding:6px 18px 2px;}
+  .year-switcher button{background:none;border:none;font-size:19px;color:var(--ink-soft);
+    width:32px;height:32px;border-radius:50%;}
+  .year-switcher .label{font-size:17px;font-weight:600;min-width:80px;text-align:center;}
+  .month-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px;}
+  .month-grid-btn{padding:14px 0;border-radius:10px;border:1px solid var(--line);
+    background:var(--field-bg);color:var(--ink);font-weight:600;font-size:14px;}
+  .month-grid-btn.active{background:var(--solid);color:#fff;border-color:var(--solid);}
+  .range-mode-row{display:flex;justify-content:center;padding:0 18px 6px;}
+  .range-mode-link{background:none;border:none;color:var(--accent);font-size:12px;font-weight:700;
+    text-decoration:underline;}
+  .date-range-row{display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 18px 14px;flex-wrap:wrap;}
+  .date-range-row input{border:1px solid var(--line);border-radius:8px;padding:7px 8px;
+    font-size:13px;background:var(--field-bg);color:var(--ink);}
+
+  .content{padding:0 18px 18px;}
+
+  .summary-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;}
+  .summary-card{background:var(--surface);border-radius:var(--radius);padding:12px 10px;text-align:center;
+    box-shadow:0 1px 3px rgba(60,50,40,.06);}
+  .summary-card .label{font-size:12px;color:var(--ink-soft);margin-bottom:4px;}
+  .summary-card .value{font-size:16px;font-weight:700;}
+  .summary-card.income .value{color:var(--income);}
+  .summary-card.expense .value{color:var(--expense);}
+
+  .section-title{font-size:14px;color:var(--ink-soft);margin:18px 0 8px;font-weight:600;
+    display:flex;align-items:center;justify-content:space-between;}
+  .section-title a{font-size:13px;color:var(--accent);font-weight:500;}
+
+  .budget-row{background:var(--surface);border-radius:12px;padding:10px 14px;margin-bottom:8px;
+    box-shadow:0 1px 3px rgba(60,50,40,.05);}
+  .budget-row .top{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px;}
+  .budget-row .top .name{font-weight:600;}
+  .budget-row .top .nums{color:var(--ink-soft);}
+  .budget-row .top .nums.over{color:var(--warn);font-weight:700;}
+  .budget-bar{height:6px;border-radius:4px;background:var(--line);overflow:hidden;}
+  .budget-bar .fill{height:100%;border-radius:4px;background:var(--income);}
+  .budget-bar .fill.warn{background:var(--accent);}
+  .budget-bar .fill.over{background:var(--warn);}
+
+  .tx-item{background:var(--surface);border-radius:12px;padding:12px 14px;margin-bottom:8px;
+    display:flex;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(60,50,40,.05);}
+  .tx-item .icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+    font-size:18px;flex-shrink:0;}
+  .tx-item .mid{flex:1;min-width:0;}
+  .tx-item .mid .cat{font-size:15px;font-weight:600;}
+  .tx-item .mid .note{font-size:13px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .tx-item .amt{font-size:16px;font-weight:700;flex-shrink:0;}
+  .tx-item .amt.income{color:var(--income);}
+  .tx-item .amt.expense{color:var(--expense);}
+  .tx-item .amt.transfer{color:var(--ink-soft);}
+  .tx-item .icon.transfer-icon{background:var(--line);}
+  .action-row{display:flex;justify-content:space-around;padding:6px 0 4px;}
+  .action-btn{display:flex;flex-direction:column;align-items:center;gap:8px;background:none;border:none;
+    font-size:14px;color:var(--ink);}
+  .action-btn .ic{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:23px;color:#fff;}
+  .action-btn.transfer .ic{background:#3B82F6;}
+  .action-btn.expense .ic{background:var(--expense);}
+  .action-btn.income .ic{background:var(--income);}
+  .empty-hint{text-align:center;color:var(--ink-soft);font-size:14px;padding:30px 0;}
+  .search-bar-wrap{position:relative;margin-bottom:14px;}
+  .search-bar-wrap input{width:100%;padding:10px 36px 10px 36px;border:1px solid var(--line);
+    border-radius:10px;background:var(--field-bg);color:var(--ink);font-size:14px;}
+  .search-bar-wrap .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);
+    font-size:15px;color:var(--ink-soft);pointer-events:none;}
+  .search-bar-wrap .search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);
+    background:none;border:none;font-size:15px;color:var(--ink-soft);padding:4px;}
+  .day-group-header{font-size:13px;color:var(--ink-soft);font-weight:600;margin:14px 0 6px;}
+
+  .bottom-nav{position:fixed;left:0;right:0;bottom:0;background:var(--surface);
+    display:flex;border-top:1px solid var(--line);padding:6px 0 max(6px,env(safe-area-inset-bottom));z-index:20;}
+  .bottom-nav button{flex:1;background:none;border:none;display:flex;flex-direction:column;
+    align-items:center;gap:2px;padding:6px 0;color:var(--ink-soft);font-size:12px;}
+  .bottom-nav button .ic{font-size:20px;}
+  .bottom-nav button.active{color:var(--expense);font-weight:600;}
+
+  .fab{position:fixed;right:18px;bottom:78px;width:54px;height:54px;border-radius:50%;
+    background:var(--expense);color:#fff;border:none;font-size:27px;box-shadow:0 4px 10px rgba(60,50,40,.25);
+    z-index:21;line-height:54px;}
+
+  .sheet-overlay{position:fixed;inset:0;background:rgba(60,50,40,.35);z-index:30;display:flex;
+    align-items:flex-end;}
+  .sheet{background:var(--surface);width:100%;border-radius:20px 20px 0 0;padding:18px 18px max(18px,env(safe-area-inset-bottom));
+    max-height:85vh;overflow-y:auto;}
+  .sheet-handle{width:36px;height:4px;background:var(--line);border-radius:2px;margin:0 auto 14px;}
+  .sheet h2{margin:0 0 16px;font-size:18px;}
+
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:13px;color:var(--ink-soft);margin-bottom:6px;}
+  .field input, .field select, .field textarea{width:100%;border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;font-size:16px;background:var(--field-bg);color:var(--ink);}
+  .field textarea{resize:none;}
+  .calc-input{background:var(--field-bg);border:1px solid var(--line);border-radius:12px;padding:10px;}
+  .calc-display{text-align:right;padding:4px 6px 10px;}
+  .calc-display .calc-expr{font-size:13px;color:var(--ink-soft);min-height:17px;word-break:break-all;}
+  .calc-display .calc-result{font-size:26px;font-weight:700;margin-top:2px;}
+  .calc-keys{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;}
+  .calc-key{padding:13px 0;border-radius:10px;border:none;background:var(--surface);color:var(--ink);
+    font-size:17px;font-weight:600;}
+  .calc-key.op{background:var(--ghost-bg);color:var(--ink-soft);}
+  .calc-key.eq{background:var(--solid);color:#fff;}
+  .calc-key.wide{grid-column:span 2;}
+  .type-toggle{display:flex;gap:8px;margin-bottom:14px;}
+  .type-toggle button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--field-bg);
+    font-size:15px;color:var(--ink-soft);font-weight:600;}
+  .type-toggle button.active.expense{background:var(--expense-soft);color:var(--expense);border-color:var(--expense);}
+  .type-toggle button.active.income{background:var(--income-soft);color:var(--income);border-color:var(--income);}
+  .btn-row{display:flex;gap:10px;margin-top:6px;}
+  .btn{flex:1;padding:13px;border-radius:12px;border:none;font-size:16px;font-weight:600;}
+  .btn.primary{background:var(--solid);color:#fff;}
+  .btn.ghost{background:var(--ghost-bg);color:var(--ink-soft);}
+  .btn.danger{background:var(--warn);color:#fff;}
+  .btn.accent{background:var(--accent);color:#fff;}
+  .btn-row.pill .btn{border-radius:999px;}
+  .detail-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .detail-header .detail-title{margin:0;font-size:17px;font-weight:700;}
+  .detail-close-x{background:none;border:none;font-size:17px;color:var(--ink-soft);padding:4px 6px;}
+
+  .calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .cal-dow{text-align:center;font-size:12px;color:var(--ink-soft);padding-bottom:6px;}
+  .cal-cell{min-height:62px;border-radius:10px;background:var(--surface);display:flex;flex-direction:column;
+    align-items:center;font-size:14px;gap:1px;position:relative;padding-top:6px;}
+  .cal-cell.empty{background:transparent;}
+  .cal-cell.today{box-shadow:inset 0 0 0 2px var(--accent);}
+  .cal-day-num{line-height:1.2;}
+  .cal-num{font-size:10.5px;line-height:1.3;font-weight:600;}
+  .cal-num.income{color:var(--income);}
+  .cal-num.expense{color:var(--expense);}
+
+  .chart-card{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:14px;
+    box-shadow:0 1px 3px rgba(60,50,40,.06);}
+  .chart-card h3{margin:0 0 12px;font-size:14px;color:var(--ink-soft);font-weight:600;}
+  .chart-scroll-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .chart-axis-wrap{position:relative;height:180px;padding-left:52px;}
+  .chart-axis-wrap .axis-label{position:absolute;left:0;font-size:10px;color:var(--ink-soft);white-space:nowrap;width:50px;text-align:right;}
+  .chart-axis-wrap .gridline{position:absolute;left:52px;right:0;border-top:1px dashed var(--line);height:0;}
+  .barchart{position:relative;display:flex;align-items:flex-end;gap:3px;height:100%;}
+  .bar-col{flex:0 0 auto;width:18px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer;}
+  .bar-col .bar{width:100%;border-radius:3px 3px 0 0;min-height:2px;opacity:.85;}
+  .bar-col .bar.picked{opacity:1;outline:2px solid var(--accent);outline-offset:1px;}
+  .bar-labels-row{display:flex;gap:3px;padding-left:52px;}
+  .bar-labels-row .bar-label{flex:0 0 auto;width:18px;text-align:center;font-size:9px;color:var(--ink-soft);}
+  .bar-labels-row .bar-label.picked{color:var(--ink);font-weight:700;}
+  .grouped-bars{display:flex;gap:2px;align-items:flex-end;height:100%;}
+  .grouped-col{flex:0 0 auto;width:22px;display:flex;align-items:flex-end;justify-content:center;gap:2px;height:100%;cursor:pointer;}
+  .grouped-bars-inner{display:flex;gap:2px;align-items:flex-end;height:100%;}
+  .grouped-bars .bar{width:8px;border-radius:3px 3px 0 0;min-height:2px;opacity:.85;}
+  .grouped-bars .bar.income{background:var(--income);}
+  .grouped-bars .bar.expense{background:var(--expense);}
+  .grouped-col.picked .bar{opacity:1;}
+  .chart-detail{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center;font-size:13px;}
+  .chart-detail .lbl{color:var(--ink-soft);font-weight:600;}
+  .chart-hint{font-size:12px;color:var(--ink-soft);text-align:center;margin-top:10px;}
+  .donut-wrap{display:flex;align-items:center;gap:18px;}
+  .donut-legend{flex:1;display:flex;flex-direction:column;gap:6px;}
+  .legend-row{display:flex;align-items:center;gap:8px;font-size:13px;}
+  .legend-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .legend-row .name{flex:1;color:var(--ink);}
+  .legend-row .val{color:var(--ink-soft);}
+  .mode-toggle{display:flex;gap:8px;margin:0 18px 12px;}
+  .mode-toggle button{flex:1;padding:8px;border-radius:10px;border:1px solid var(--line);background:var(--surface);
+    font-size:14px;color:var(--ink-soft);font-weight:600;}
+  .mode-toggle button.active{background:var(--solid);color:#fff;border-color:var(--solid);}
+
+  .cat-section{margin-bottom:20px;}
+  .cat-section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .cat-section-title h3{margin:0;font-size:15px;}
+  .cat-section-title button{background:var(--accent);color:#fff;border:none;border-radius:8px;
+    padding:6px 10px;font-size:13px;font-weight:600;}
+  .cat-node{margin-bottom:6px;}
+  .cat-row{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:10px;
+    padding:9px 10px;box-shadow:0 1px 2px rgba(60,50,40,.05);}
+  .cat-row .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .cat-row .name{flex:1;font-size:14px;font-weight:600;}
+  .cat-row .budget-tag{font-size:12px;color:var(--ink-soft);}
+  .cat-row .icon-btn{background:none;border:none;font-size:15px;color:var(--ink-soft);padding:4px;}
+  .cat-row .more-btn{font-size:19px;font-weight:700;padding:4px 8px;}
+  .action-list{display:flex;flex-direction:column;gap:8px;margin:12px 0;}
+  .action-list-item{width:100%;text-align:left;padding:13px 14px;border-radius:10px;border:none;
+    background:var(--field-bg);color:var(--ink);font-size:14px;font-weight:600;}
+  .action-list-item.danger{color:var(--warn);}
+  .cat-row .drag-handle{font-size:16px;color:var(--ink-soft);padding:4px 2px;touch-action:none;cursor:grab;}
+  .cat-children{margin-left:22px;margin-top:6px;border-left:1px dashed var(--line);padding-left:10px;}
+
+  .settings-mode-toggle{display:flex;gap:8px;margin-bottom:16px;}
+  .settings-mode-toggle button{flex:1;padding:9px;border-radius:10px;border:1px solid var(--line);background:var(--surface);
+    font-size:14px;color:var(--ink-soft);font-weight:600;}
+  .settings-mode-toggle button.active{background:var(--solid);color:#fff;border-color:var(--solid);}
+
+  .networth-card{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:18px;
+    box-shadow:0 1px 3px rgba(60,50,40,.06);}
+  .networth-card .nw-top{display:flex;justify-content:space-between;align-items:center;}
+  .networth-card .nw-mask-btn{background:none;border:none;font-size:16px;padding:2px 4px;color:var(--ink-soft);}
+  .networth-card .nw-label{font-size:13px;color:var(--ink-soft);}
+  .networth-card .nw-value{font-size:25px;font-weight:700;margin:4px 0 12px;}
+  .networth-card .nw-split{display:flex;gap:16px;font-size:13px;color:var(--ink-soft);}
+  .networth-card .nw-split b{color:var(--ink);font-weight:700;}
+
+  .acc-section{margin-bottom:20px;}
+  .acc-section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .acc-section-title h3{margin:0;font-size:15px;}
+  .acc-section-title button{background:var(--accent);color:#fff;border:none;border-radius:8px;
+    padding:6px 10px;font-size:13px;font-weight:600;}
+  .acc-row{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:10px;
+    padding:9px 10px;margin-bottom:6px;box-shadow:0 1px 2px rgba(60,50,40,.05);}
+  .acc-row-main{display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;}
+  .acc-icon{width:34px;height:34px;border-radius:50%;background:var(--bg);display:flex;align-items:center;
+    justify-content:center;font-size:17px;flex-shrink:0;overflow:hidden;}
+  .acc-icon.card-shape{width:46px;height:30px;border-radius:5px;}
+  .acc-row .name{flex:1;font-size:14px;font-weight:600;min-width:0;}
+  .acc-name-wrap{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .acc-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .acc-row .bal{font-size:13px;color:var(--ink-soft);white-space:nowrap;}
+  .acc-detail-balance{text-align:center;padding:6px 0 14px;}
+  .acc-detail-balance .nw-value{font-size:26px;font-weight:700;margin-top:4px;}
+  .acc-detail-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+  .acc-detail-stats .stat{background:var(--field-bg);border-radius:10px;padding:10px;text-align:center;}
+  .acc-detail-stats .stat span{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:3px;}
+  .acc-detail-stats .stat b{font-size:14px;}
+  .acc-detail-stats .stat b.pos{color:var(--income);}
+  .acc-detail-stats .stat b.neg{color:var(--expense);}
+  .acc-detail-year-row{display:flex;justify-content:flex-end;margin-bottom:10px;}
+  .acc-detail-year-row select{border:1px solid var(--line);border-radius:8px;padding:6px 8px;
+    font-size:13px;background:var(--field-bg);color:var(--ink);}
+  .acc-row .bal.neg{color:var(--warn);}
+  .acc-row .icon-btn{background:none;border:none;font-size:15px;color:var(--ink-soft);padding:4px;}
+  .acc-row .drag-handle{font-size:17px;color:var(--ink-soft);padding:4px 2px;touch-action:none;cursor:grab;}
+
+  .inv-row{background:var(--surface);border-radius:12px;padding:14px;margin-bottom:8px;
+    box-shadow:0 1px 2px rgba(60,50,40,.05);}
+  .inv-row .inv-top{display:flex;justify-content:space-between;align-items:baseline;}
+  .inv-row .inv-name{font-size:15px;font-weight:700;}
+  .inv-row .inv-code{font-size:13px;color:var(--ink-soft);margin-left:4px;}
+  .inv-row .inv-shares{font-size:13px;color:var(--ink-soft);margin-top:2px;}
+  .inv-row .inv-pct{font-size:15px;font-weight:700;white-space:nowrap;}
+  .inv-row .inv-pct.pos{color:var(--income);}
+  .inv-row .inv-pct.neg{color:var(--expense);}
+  .inv-row .inv-detail{margin-top:8px;border-top:1px solid var(--line);padding-top:4px;}
+  .inv-row .inv-detail-row{display:flex;justify-content:space-between;font-size:14px;
+    padding:6px 0;border-bottom:1px solid var(--line);}
+  .inv-row .inv-detail-row:last-child{border-bottom:none;}
+  .inv-row .inv-detail-row .lbl{color:var(--ink-soft);}
+  .inv-row .inv-detail-row .val{font-weight:600;}
+  .inv-row .inv-gain.pos{color:var(--income);}
+  .inv-row .inv-gain.neg{color:var(--expense);}
+  .inv-row .inv-actions{display:flex;justify-content:flex-end;gap:4px;margin-top:4px;}
+  .inv-row .inv-actions button{background:none;border:none;font-size:15px;color:var(--ink-soft);padding:4px;}
+
+  .inv-summary{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:14px;
+    box-shadow:0 1px 3px rgba(60,50,40,.06);}
+  .inv-summary .row{display:flex;justify-content:space-between;font-size:14px;padding:5px 0;}
+  .inv-summary .row .lbl{color:var(--ink-soft);}
+  .inv-summary .row .val{font-weight:700;}
+  .inv-summary .row .val.pos{color:var(--income);}
+  .inv-summary .row .val.neg{color:var(--expense);}
+
+  .top-msg{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--solid);color:#fff;
+    padding:9px 16px;border-radius:10px;font-size:14px;z-index:40;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="importmap">
+{
+  "imports":{
+    "react":"https://esm.sh/react@18.2.0",
+    "react/jsx-runtime":"https://esm.sh/react@18.2.0/jsx-runtime",
+    "react-dom/client":"https://esm.sh/react-dom@18.2.0/client"
+  }
+}
+</script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
+
+<script type="text/babel" data-presets="react" data-type="module">
+import React,{useState,useEffect,useMemo,useRef} from "react";
+import {createRoot} from "react-dom/client";
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc,
+  onSnapshot, query, orderBy, writeBatch
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* ====== TODO: 貼上你自己的 Firebase config ====== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAWn_sFd3Fd4Rrs8u_RCTYuSGbN3JfauK4",
+  authDomain: "my-asset-2a8ac.firebaseapp.com",
+  projectId: "my-asset-2a8ac",
+  storageBucket: "my-asset-2a8ac.firebasestorage.app",
+  messagingSenderId: "235191609079",
+  appId: "1:235191609079:web:55d323853ffb4ef82795f2"
+};
+/* ============================================== */
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const PALETTE = ["#B98C82","#8FA38E","#C9B38B","#94A7B5","#A98C78","#B5949A","#7E9181","#C2A878","#9E8B99","#8FA8A0"];
+
+const DEFAULT_CATEGORIES = [
+  {name:"薪資", type:"income", icon:"💰"},
+  {name:"獎金", type:"income", icon:"🎁"},
+  {name:"投資", type:"income", icon:"📈"},
+  {name:"其他收入", type:"income", icon:"➕"},
+  {name:"飲食", type:"expense", icon:"🍙"},
+  {name:"交通", type:"expense", icon:"🚌"},
+  {name:"居住", type:"expense", icon:"🏠"},
+  {name:"娛樂", type:"expense", icon:"🎮"},
+  {name:"購物", type:"expense", icon:"🛍️"},
+  {name:"醫療", type:"expense", icon:"💊"},
+  {name:"學習", type:"expense", icon:"📚"},
+  {name:"其他支出", type:"expense", icon:"🔖"},
+];
+
+function pad(n){return n<10?"0"+n:""+n;}
+function toDateStr(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
+function fromDateStr(s){const p=s.split("-").map(Number);return new Date(p[0],p[1]-1,p[2]);}
+function monthKey(d){return d.getFullYear()+"-"+pad(d.getMonth()+1);}
+function fmtMoney(n){return ""+Math.round(n||0).toLocaleString("zh-Hant-TW");}
+function maskMoney(n, masked){ return masked ? "••••••" : fmtMoney(n); }
+function safeEval(expr){
+  if(!expr) return 0;
+  let s = String(expr).trim().replace(/[+\-*/.]+$/, "");
+  if(!s) return 0;
+  if(!/^[0-9+\-*/.\s]+$/.test(s)) return 0;
+  try{
+    const val = Function('"use strict";return ('+s+')')();
+    return (typeof val==="number" && isFinite(val)) ? val : 0;
+  }catch(e){ return 0; }
+}
+function fmtAxisNum(n){
+  n = Math.round(n||0);
+  return n.toLocaleString("zh-Hant-TW");
+}
+function niceMax(rawMax){
+  if(rawMax<=0) return 1000;
+  const steps = [100,200,500,1000,2000,5000,10000,20000,50000,100000,200000,500000];
+  for(const s of steps){
+    const ceil = Math.ceil(rawMax/s)*s;
+    if(ceil>=rawMax) return ceil;
+  }
+  return Math.ceil(rawMax/100000)*100000;
+}
+function niceGridlines(max, count){
+  // 傳回 count 條格線的值（從0往上，不含0和max）
+  const out = [];
+  for(let i=1;i<count;i++) out.push(max/count*i);
+  return out;
+}
+function fmtMonthLabel(d){return d.getFullYear()+"年"+(d.getMonth()+1)+"月";}
+function daysInMonth(d){return new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();}
+function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36);}
+
+const WEEKDAY_CN = ["日","一","二","三","四","五","六"];
+function formatDayLabel(dateStr){
+  const d = fromDateStr(dateStr);
+  const today = toDateStr(new Date());
+  const yest = new Date(); yest.setDate(yest.getDate()-1);
+  if(dateStr===today) return "今天";
+  if(dateStr===toDateStr(yest)) return "昨天";
+  return (d.getMonth()+1)+"月"+d.getDate()+"日 週"+WEEKDAY_CN[d.getDay()];
+}
+function groupByDate(transactions){
+  const map = {};
+  transactions.forEach(t=>{
+    if(!map[t.date]) map[t.date] = [];
+    map[t.date].push(t);
+  });
+  return Object.keys(map).sort((a,b)=>b.localeCompare(a)).map(date=>({
+    date,
+    items: map[date].slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))
+  }));
+}
+
+const ACCOUNT_TYPES = [
+  {key:"wallet", label:"錢包", icon:"👛"},
+  {key:"checking", label:"活存", icon:"🏦"},
+  {key:"credit", label:"信用", icon:"💳"},
+  {key:"fixed", label:"定存", icon:"🔐"},
+];
+function accTypeInfo(key){return ACCOUNT_TYPES.find(t=>t.key===key) || ACCOUNT_TYPES[0];}
+function isLiability(type){return type==="credit";}
+function monthlyInterest(acc){
+  if(acc.type!=="fixed" || !acc.rate) return 0;
+  return (acc.initialBalance||0) * (acc.rate/100) / 12;
+}
+function addMonthsClamped(date, months){
+  const d = new Date(date.getFullYear(), date.getMonth()+months, 1);
+  const lastDay = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+  d.setDate(Math.min(date.getDate(), lastDay));
+  return d;
+}
+function dueInterestDates(acc, today){
+  if(!acc.startDate || !acc.endDate || !acc.rate) return [];
+  const start = fromDateStr(acc.startDate);
+  const end = fromDateStr(acc.endDate);
+  const dates = [];
+  let i = 1;
+  while(i<=600){
+    const d = addMonthsClamped(start, i);
+    if(d.getTime()>end.getTime() || d.getTime()>today.getTime()) break;
+    dates.push(toDateStr(d));
+    i++;
+  }
+  return dates;
+}
+
+function accountBalance(acc, transactions){
+  let bal = acc.initialBalance || 0;
+  transactions.forEach(t=>{
+    if(t.type==="transfer"){
+      const leaving = t.fromAccountId===acc.id;
+      const arriving = t.toAccountId===acc.id;
+      if(!leaving && !arriving) return;
+      if(isLiability(acc.type)){
+        if(leaving) bal += t.amount;
+        if(arriving) bal -= t.amount;
+      }else{
+        if(leaving) bal -= t.amount;
+        if(arriving) bal += t.amount;
+      }
+      return;
+    }
+    if(t.accountId !== acc.id) return;
+    if(isLiability(acc.type)){
+      if(t.type==="expense") bal += t.amount;
+      else bal -= t.amount;
+    }else{
+      if(t.type==="income") bal += t.amount;
+      else bal -= t.amount;
+    }
+  });
+  return bal;
+}
+
+function invMarketValue(inv){ return (inv.shares||0) * (inv.currentPrice||0); }
+function invCostBasis(inv){ return (inv.shares||0) * (inv.avgCost||0); }
+function invGain(inv){ return invMarketValue(inv) - invCostBasis(inv); }
+function invReturnPct(inv){
+  const cost = invCostBasis(inv);
+  return cost>0 ? (invGain(inv)/cost*100) : 0;
+}
+
+function fileToIconDataURL(file, width, height){
+  width = width || 56;
+  height = height || width;
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        const targetRatio = width/height;
+        const srcRatio = img.width/img.height;
+        let sx, sy, sw, sh;
+        if(srcRatio > targetRatio){
+          sh = img.height; sw = sh*targetRatio;
+          sx = (img.width-sw)/2; sy = 0;
+        }else{
+          sw = img.width; sh = sw/targetRatio;
+          sx = 0; sy = (img.height-sh)/2;
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function buildTree(list){
+  const map={};
+  list.forEach(c=>map[c.id]={...c, children:[]});
+  const roots=[];
+  list.forEach(c=>{
+    if(c.parentId && map[c.parentId]) map[c.parentId].children.push(map[c.id]);
+    else roots.push(map[c.id]);
+  });
+  roots.sort((a,b)=>(a.order||0)-(b.order||0));
+  Object.values(map).forEach(n=>n.children.sort((a,b)=>(a.order||0)-(b.order||0)));
+  return roots;
+}
+function flattenForSelect(list, type){
+  const roots=buildTree(list.filter(c=>c.type===type));
+  const out=[];
+  function walk(node, depth){
+    if(node.children.length===0){
+      out.push({id:node.id, label:"\u3000".repeat(depth)+(node.icon||"")+" "+node.name});
+    }else{
+      node.children.forEach(ch=>walk(ch, depth+1));
+    }
+  }
+  roots.forEach(r=>walk(r,0));
+  return out;
+}
+function categoryOptionGroups(categories, type){
+  const roots = buildTree(categories.filter(c=>c.type===type));
+  return roots.map(root=>{
+    if(root.children.length===0){
+      return <option key={root.id} value={root.id}>{root.icon} {root.name}</option>;
+    }
+    const leaves = [];
+    function walk(node, depth){
+      if(node.children.length===0){
+        leaves.push({id:node.id, label:"\u3000".repeat(depth)+(node.icon||"")+" "+node.name});
+      }else{
+        node.children.forEach(ch=>walk(ch, depth+1));
+      }
+    }
+    root.children.forEach(ch=>walk(ch,0));
+    return (
+      <optgroup key={root.id} label={root.icon+" "+root.name}>
+        {leaves.map(l=><option key={l.id} value={l.id}>{l.label}</option>)}
+      </optgroup>
+    );
+  });
+}
+function catById(list, id){return list.find(c=>c.id===id);}
+
+async function seedDefaultCategories(){
+  const batch = writeBatch(db);
+  DEFAULT_CATEGORIES.forEach((c,i)=>{
+    const ref = doc(collection(db,"categories"));
+    batch.set(ref, {name:c.name, type:c.type, icon:c.icon, parentId:null, color:PALETTE[i%PALETTE.length], order:i});
+  });
+  await batch.commit();
+}
+async function seedDefaultAccount(){
+  await addDoc(collection(db,"accounts"), {name:"錢包", type:"wallet", icon:"👛", iconImage:null, initialBalance:0, order:0});
+}
+
+/* ---------- 小元件 ---------- */
+function MonthSwitcher({date, onPrev, onNext, onJump}){
+  return (
+    <div className="month-switcher">
+      <button onClick={onPrev}>‹</button>
+      {onJump ?
+        <button className="label-btn" onClick={onJump}>{fmtMonthLabel(date)}</button>
+        : <span className="label">{fmtMonthLabel(date)}</span>
+      }
+      <button onClick={onNext}>›</button>
+    </div>
+  );
+}
+function MonthPickerSheet({year, month, onPick, onClose}){
+  const [y, setY] = useState(year);
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <div className="year-switcher">
+          <button onClick={()=>setY(y-1)}>‹</button>
+          <span className="label">{y}年</span>
+          <button onClick={()=>setY(y+1)}>›</button>
+        </div>
+        <div className="month-grid">
+          {Array.from({length:12},(_,i)=>i+1).map(m=>(
+            <button key={m} className={"month-grid-btn"+(y===year&&m===month?" active":"")}
+              onClick={()=>{ onPick(y, m); onClose(); }}>{m}月</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+function YearSwitcher({year, onPrev, onNext}){
+  return (
+    <div className="year-switcher">
+      <button onClick={onPrev}>‹</button>
+      <span className="label">{year}年</span>
+      <button onClick={onNext}>›</button>
+    </div>
+  );
+}
+function BarChart({data, onPick, selectedIndex}){
+  const GRID = 4; // 格線數量（含頂）
+  const BAR_W = 18, GAP = 3;
+  const rawMax = Math.max(1, ...data.map(d=>Math.abs(d.value)));
+  const max = niceMax(rawMax);
+  const gridLines = niceGridlines(max, GRID); // 從上往下的格線值
+  const totalW = data.length * (BAR_W + GAP);
+  return (
+    <div className="chart-scroll-wrap">
+      <div style={{minWidth: totalW + 38}}>
+        <div className="chart-axis-wrap" style={{height:180}}>
+          {/* Y軸標籤 */}
+          {[...gridLines].reverse().map((v,i)=>(
+            <span key={i} className="axis-label"
+              style={{top: (i/(GRID-1)*100)+"%", transform:"translateY(-50%)"}}>{fmtAxisNum(v)}</span>
+          ))}
+          <span className="axis-label" style={{bottom:0, transform:"translateY(50%)"}}>0</span>
+          {/* 格線 */}
+          {gridLines.map((v,i)=>(
+            <div key={i} className="gridline"
+              style={{bottom: (v/max*100)+"%"}} />
+          ))}
+          <div className="gridline" style={{bottom:0}} />
+          {/* 長條 */}
+          <div className="barchart">
+            {data.map((d,i)=>(
+              <div className="bar-col" key={i} onClick={()=>onPick(i===selectedIndex?null:i)}>
+                <div className={"bar"+(selectedIndex===i?" picked":"")}
+                  style={{height:(Math.abs(d.value)/max*100)+"%",
+                    background: d.value>=0?"var(--income)":"var(--expense)"}}></div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="bar-labels-row">
+          {data.map((d,i)=>(
+            <span className={"bar-label"+(selectedIndex===i?" picked":"")} key={i}>{d.label}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+function GroupedBarChart({months, onPick, selectedIndex}){
+  const GRID = 4;
+  const COL_W = 22, GAP = 3;
+  const rawMax = Math.max(1, ...months.flatMap(m=>[m.income, m.expense]));
+  const max = niceMax(rawMax);
+  const gridLines = niceGridlines(max, GRID);
+  const totalW = months.length * (COL_W + GAP);
+  return (
+    <div className="chart-scroll-wrap">
+      <div style={{minWidth: totalW + 38}}>
+        <div className="chart-axis-wrap" style={{height:180}}>
+          {[...gridLines].reverse().map((v,i)=>(
+            <span key={i} className="axis-label"
+              style={{top: (i/(GRID-1)*100)+"%", transform:"translateY(-50%)"}}>{fmtAxisNum(v)}</span>
+          ))}
+          <span className="axis-label" style={{bottom:0, transform:"translateY(50%)"}}>0</span>
+          {gridLines.map((v,i)=>(
+            <div key={i} className="gridline" style={{bottom:(v/max*100)+"%"}} />
+          ))}
+          <div className="gridline" style={{bottom:0}} />
+          <div className="barchart">
+            {months.map((m,i)=>(
+              <div className={"grouped-col"+(selectedIndex===i?" picked":"")} key={i} onClick={()=>onPick(i===selectedIndex?null:i)}>
+                <div className="grouped-bars-inner">
+                  <div className="bar income" style={{height:(m.income/max*100)+"%"}}></div>
+                  <div className="bar expense" style={{height:(m.expense/max*100)+"%"}}></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="bar-labels-row">
+          {months.map((m,i)=>(
+            <span className={"bar-label"+(selectedIndex===i?" picked":"")} key={i}
+              style={{width:COL_W}}>{m.label}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+function Donut({data, size}){
+  size = size || 140;
+  const thickness = 20;
+  const total = data.reduce((s,d)=>s+d.value,0) || 1;
+  const radius = (size-thickness)/2;
+  const circumference = 2*Math.PI*radius;
+  let offset = 0;
+  return (
+    <svg width={size} height={size} viewBox={"0 0 "+size+" "+size}>
+      <g transform={"translate("+size/2+","+size/2+") rotate(-90)"}>
+        {data.map((d,i)=>{
+          const frac = d.value/total;
+          const dash = frac*circumference;
+          const el = (
+            <circle key={i} r={radius} fill="none" stroke={d.color} strokeWidth={thickness}
+              strokeDasharray={dash+" "+(circumference-dash)} strokeDashoffset={-offset}></circle>
+          );
+          offset += dash;
+          return el;
+        })}
+      </g>
+      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" fontSize="13" fill="var(--ink)">支出</text>
+    </svg>
+  );
+}
+
+/* 通用拖曳排序清單：用 Pointer Events，手機/桌面都通用 */
+function DragList({items, onReorder, renderRow}){
+  const [list, setList] = useState(items);
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOffset, setDragOffset] = useState(0);
+  const startYRef = useRef(0);
+  const refs = useRef({});
+
+  useEffect(()=>{ setList(items); }, [items.map(it=>it.id).join(",")]);
+
+  function startDrag(id, e){
+    e.preventDefault();
+    try{ e.target.setPointerCapture(e.pointerId); }catch(err){}
+    startYRef.current = e.clientY;
+    setDraggingId(id);
+    setDragOffset(0);
+  }
+  function onMove(e){
+    if(draggingId==null) return;
+    const dy = e.clientY - startYRef.current;
+    setDragOffset(dy);
+    const idx = list.findIndex(it=>it.id===draggingId);
+    const el = refs.current[draggingId];
+    if(!el || idx<0) return;
+    const rect = el.getBoundingClientRect();
+    const myCenter = rect.top + rect.height/2 + dy;
+    let newIdx = idx;
+    list.forEach((it,i)=>{
+      if(it.id===draggingId) return;
+      const r = refs.current[it.id];
+      if(!r) return;
+      const rr = r.getBoundingClientRect();
+      const c = rr.top + rr.height/2;
+      if(i<idx && myCenter < c) newIdx = Math.min(newIdx, i);
+      if(i>idx && myCenter > c) newIdx = Math.max(newIdx, i);
+    });
+    if(newIdx!==idx){
+      const next = list.slice();
+      const moved = next.splice(idx,1)[0];
+      next.splice(newIdx,0,moved);
+      setList(next);
+      startYRef.current = e.clientY;
+      setDragOffset(0);
+    }
+  }
+  function endDrag(){
+    if(draggingId!=null) onReorder(list);
+    setDraggingId(null);
+    setDragOffset(0);
+  }
+
+  return (
+    <div>
+      {list.map(it=>(
+        <div key={it.id} ref={el=>{refs.current[it.id]=el;}}
+          style={it.id===draggingId ? {transform:"translateY("+dragOffset+"px)", position:"relative", zIndex:5} : {transition:"transform .15s"}}>
+          {renderRow(it, {onPointerDown:(e)=>startDrag(it.id,e), onPointerMove:onMove, onPointerUp:endDrag, onPointerCancel:endDrag})}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BottomNav({tab, setTab}){
+  const items=[
+    {key:"home", icon:"🏠", label:"首頁"},
+    {key:"analysis", icon:"📊", label:"分析"},
+    {key:"settings", icon:"🗂", label:"管理"},
+  ];
+  return (
+    <div className="bottom-nav">
+      {items.map(it=>(
+        <button key={it.key} className={tab===it.key?"active":""} onClick={()=>setTab(it.key)}>
+          <span className="ic">{it.icon}</span>
+          <span>{it.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TxRow({t, categories, accounts, onClick}){
+  if(t.type==="transfer"){
+    const fromAcc = catById(accounts, t.fromAccountId);
+    const toAcc = catById(accounts, t.toAccountId);
+    const subLabel = [(fromAcc?fromAcc.name:"?")+" → "+(toAcc?toAcc.name:"?"), t.note||null].filter(Boolean).join("・");
+    return (
+      <div className="tx-item" onClick={onClick}>
+        <div className="icon transfer-icon">🔁</div>
+        <div className="mid">
+          <div className="cat">轉帳</div>
+          <div className="note">{subLabel}</div>
+        </div>
+        <div className="amt transfer">{fmtMoney(t.amount)}</div>
+      </div>
+    );
+  }
+  const cat = catById(categories, t.categoryId);
+  const acc = catById(accounts, t.accountId);
+  const subLabel = [acc?acc.name:null, t.counterpart||null, t.note||null].filter(Boolean).join("・");
+  return (
+    <div className="tx-item" onClick={onClick}>
+      <div className="icon" style={{background:(cat?cat.color:"#ccc")+"22"}}>{cat?cat.icon:"❓"}</div>
+      <div className="mid">
+        <div className="cat">{cat?cat.name:"未分類"}</div>
+        {subLabel && <div className="note">{subLabel}</div>}
+      </div>
+      <div className={"amt "+t.type}>{t.type==="income"?"+":"−"}{fmtMoney(t.amount)}</div>
+    </div>
+  );
+}
+
+function TxDetailSheet({t, categories, accounts, onEdit, onClose}){
+  const isTransfer = t.type==="transfer";
+  const cat = !isTransfer ? catById(categories, t.categoryId) : null;
+  const acc = !isTransfer ? catById(accounts, t.accountId) : null;
+  const fromAcc = isTransfer ? catById(accounts, t.fromAccountId) : null;
+  const toAcc = isTransfer ? catById(accounts, t.toAccountId) : null;
+  const isCreditAcc = acc && acc.type==="credit";
+
+  let typeLabel;
+  if(isTransfer) typeLabel = "轉帳";
+  else if(t.type==="income") typeLabel = isCreditAcc ? "還款" : "收入";
+  else typeLabel = isCreditAcc ? "刷卡" : "支出";
+
+  const amtColor = isTransfer ? "var(--ink-soft)" : (t.type==="income" ? "var(--income)" : "var(--expense)");
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="detail-header">
+          <h2 className="detail-title">交易詳情</h2>
+          <button className="detail-close-x" onClick={onClose}>✕</button>
+        </div>
+        <div style={{textAlign:"center", marginBottom:18}}>
+          <div style={{fontSize:31}}>{isTransfer?"🔁":(cat?cat.icon:"❓")}</div>
+          <div style={{fontSize:16, fontWeight:700, marginTop:6}}>{isTransfer?"轉帳":(cat?cat.name:"未分類")}</div>
+          <div style={{fontSize:24, fontWeight:700, color:amtColor, marginTop:4}}>
+            {isTransfer?"":(t.type==="income"?"+":"−")}{fmtMoney(t.amount)}
+          </div>
+        </div>
+        <div className="inv-detail">
+          <div className="inv-detail-row"><span className="lbl">類型</span><span className="val">{typeLabel}</span></div>
+          {isTransfer ?
+            <React.Fragment>
+              <div className="inv-detail-row"><span className="lbl">從</span><span className="val">{fromAcc?fromAcc.name:"未指定"}</span></div>
+              <div className="inv-detail-row"><span className="lbl">到</span><span className="val">{toAcc?toAcc.name:"未指定"}</span></div>
+            </React.Fragment>
+            :
+            <div className="inv-detail-row"><span className="lbl">帳戶</span><span className="val">{acc?acc.name:"未指定"}</span></div>
+          }
+          <div className="inv-detail-row"><span className="lbl">日期</span><span className="val">{t.date}</span></div>
+          {t.counterpart && <div className="inv-detail-row"><span className="lbl">{t.type==="expense"?"付給":"收自"}</span><span className="val">{t.counterpart}</span></div>}
+          {t.note && <div className="inv-detail-row"><span className="lbl">備註</span><span className="val">{t.note}</span></div>}
+        </div>
+        <div className="btn-row pill">
+          <button className="btn ghost" onClick={onClose}>關閉</button>
+          <button className="btn accent" onClick={onEdit}>編輯</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalcInput({value, onChange}){
+  const [expr, setExpr] = useState((value!=null && value!=="") ? String(value) : "");
+  const result = safeEval(expr);
+
+  useEffect(()=>{ onChange(result); }, [expr]);
+
+  function press(key){
+    if(key==="AC"){ setExpr(""); return; }
+    if(key==="DEL"){ setExpr(s=>s.slice(0,-1)); return; }
+    if(key==="="){ setExpr(s=>String(safeEval(s))); return; }
+    if(key==="+"||key==="-"||key==="*"||key==="/"){
+      setExpr(s=>{
+        if(s==="") return s;
+        if(/[+\-*/]$/.test(s)) return s.slice(0,-1)+key;
+        return s+key;
+      });
+      return;
+    }
+    if(key==="."){
+      setExpr(s=>{
+        const lastSeg = s.split(/[+\-*/]/).pop();
+        if(lastSeg.indexOf(".")>=0) return s;
+        return s+key;
+      });
+      return;
+    }
+    setExpr(s=>s+key);
+  }
+
+  return (
+    <div className="calc-input">
+      <div className="calc-display">
+        <div className="calc-expr">{expr||"0"}</div>
+        <div className="calc-result">{fmtMoney(result)}</div>
+      </div>
+      <div className="calc-keys">
+        <button type="button" className="calc-key op" onClick={()=>press("AC")}>AC</button>
+        <button type="button" className="calc-key op" onClick={()=>press("DEL")}>⌫</button>
+        <button type="button" className="calc-key op" onClick={()=>press("/")}>÷</button>
+        <button type="button" className="calc-key op" onClick={()=>press("*")}>×</button>
+        <button type="button" className="calc-key" onClick={()=>press("7")}>7</button>
+        <button type="button" className="calc-key" onClick={()=>press("8")}>8</button>
+        <button type="button" className="calc-key" onClick={()=>press("9")}>9</button>
+        <button type="button" className="calc-key op" onClick={()=>press("-")}>−</button>
+        <button type="button" className="calc-key" onClick={()=>press("4")}>4</button>
+        <button type="button" className="calc-key" onClick={()=>press("5")}>5</button>
+        <button type="button" className="calc-key" onClick={()=>press("6")}>6</button>
+        <button type="button" className="calc-key op" onClick={()=>press("+")}>＋</button>
+        <button type="button" className="calc-key" onClick={()=>press("1")}>1</button>
+        <button type="button" className="calc-key" onClick={()=>press("2")}>2</button>
+        <button type="button" className="calc-key" onClick={()=>press("3")}>3</button>
+        <button type="button" className="calc-key eq" onClick={()=>press("=")}>＝</button>
+        <button type="button" className="calc-key wide" onClick={()=>press("0")}>0</button>
+        <button type="button" className="calc-key wide" onClick={()=>press(".")}>.</button>
+      </div>
+    </div>
+  );
+}
+
+function AddTxModal({categories, accounts, initial, onSave, onDelete, onClose}){
+  const [type, setType] = useState((initial&&initial.type)||"expense");
+  const [amount, setAmount] = useState(initial?String(initial.amount):"");
+  const [categoryId, setCategoryId] = useState((initial&&initial.categoryId)||"");
+  const [accountId, setAccountId] = useState((initial&&initial.accountId)|| (accounts[0]?accounts[0].id:""));
+  const [date, setDate] = useState((initial&&initial.date)||toDateStr(new Date()));
+  const [note, setNote] = useState((initial&&initial.note)||"");
+  const [counterpart, setCounterpart] = useState((initial&&initial.counterpart)||"");
+  const options = useMemo(()=>flattenForSelect(categories, type), [categories, type]);
+  const selectedAccount = accounts.find(a=>a.id===accountId);
+  const isCredit = selectedAccount && selectedAccount.type==="credit";
+
+  useEffect(()=>{
+    if(!options.find(o=>o.id===categoryId)) setCategoryId(options[0]?options[0].id:"");
+  }, [type]);
+
+  function submit(){
+    const n = parseFloat(amount);
+    if(!n || n<=0){ alert("請輸入金額"); return; }
+    if(!categoryId){ alert("請選擇分類"); return; }
+    onSave({type, amount:n, categoryId, accountId: accountId||null, date, note, counterpart: counterpart.trim()||null});
+  }
+
+  const counterpartLabel = type==="expense" ? "付給（對象）" : "收自（對象）";
+  const counterpartPlaceholder = type==="expense" ? "例如：全家、Sukiya" : "例如：公司、朋友名字";
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>{initial?"編輯交易":"新增交易"}</h2>
+        <div className="type-toggle">
+          <button className={type==="expense"?"active expense":""} onClick={()=>setType("expense")}>{isCredit?"刷卡":"支出"}</button>
+          <button className={type==="income"?"active income":""} onClick={()=>setType("income")}>{isCredit?"還款":"收入"}</button>
+        </div>
+        <div className="field">
+          <label>金額</label>
+          <CalcInput value={amount} onChange={setAmount} />
+        </div>
+        <div className="field">
+          <label>帳戶</label>
+          <select value={accountId} onChange={e=>setAccountId(e.target.value)}>
+            {ACCOUNT_TYPES.map(t=>{
+              const group = accounts.filter(a=>a.type===t.key);
+              if(group.length===0) return null;
+              return (
+                <optgroup key={t.key} label={t.icon+" "+t.label}>
+                  {group.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+                </optgroup>
+              );
+            })}
+          </select>
+        </div>
+        <div className="field">
+          <label>分類</label>
+          <select value={categoryId} onChange={e=>setCategoryId(e.target.value)}>
+            {categoryOptionGroups(categories, type)}
+          </select>
+        </div>
+        <div className="field">
+          <label>{counterpartLabel}</label>
+          <input type="text" value={counterpart} onChange={e=>setCounterpart(e.target.value)} placeholder={counterpartPlaceholder} />
+        </div>
+        <div className="field">
+          <label>日期</label>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>備註</label>
+          <input type="text" value={note} onChange={e=>setNote(e.target.value)} placeholder="選填" />
+        </div>
+        <div className="btn-row">
+          {initial && <button className="btn danger" onClick={()=>onDelete(initial.id)}>刪除</button>}
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function accountSelectGroups(accounts){
+  return ACCOUNT_TYPES.map(t=>{
+    const group = accounts.filter(a=>a.type===t.key);
+    if(group.length===0) return null;
+    return (
+      <optgroup key={t.key} label={t.icon+" "+t.label}>
+        {group.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+      </optgroup>
+    );
+  });
+}
+
+function TransferModal({accounts, initial, onSave, onDelete, onClose}){
+  const [amount, setAmount] = useState(initial?String(initial.amount):"");
+  const [fromAccountId, setFromAccountId] = useState((initial&&initial.fromAccountId)||(accounts[0]?accounts[0].id:""));
+  const [toAccountId, setToAccountId] = useState((initial&&initial.toAccountId)||(accounts[1]?accounts[1].id:(accounts[0]?accounts[0].id:"")));
+  const [date, setDate] = useState((initial&&initial.date)||toDateStr(new Date()));
+  const [note, setNote] = useState((initial&&initial.note)||"");
+
+  function submit(){
+    const n = parseFloat(amount);
+    if(!n || n<=0){ alert("請輸入金額"); return; }
+    if(!fromAccountId || !toAccountId){ alert("請選擇轉出與轉入帳戶"); return; }
+    if(fromAccountId===toAccountId){ alert("轉出與轉入帳戶不能相同"); return; }
+    onSave({type:"transfer", amount:n, fromAccountId, toAccountId, categoryId:null, accountId:null, date, note});
+  }
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>{initial?"編輯轉帳":"新增轉帳"}</h2>
+        <div className="field">
+          <label>金額</label>
+          <CalcInput value={amount} onChange={setAmount} />
+        </div>
+        <div className="field">
+          <label>從（轉出）</label>
+          <select value={fromAccountId} onChange={e=>setFromAccountId(e.target.value)}>{accountSelectGroups(accounts)}</select>
+        </div>
+        <div className="field">
+          <label>到（轉入）</label>
+          <select value={toAccountId} onChange={e=>setToAccountId(e.target.value)}>{accountSelectGroups(accounts)}</select>
+        </div>
+        <div className="field">
+          <label>日期</label>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>備註</label>
+          <input type="text" value={note} onChange={e=>setNote(e.target.value)} placeholder="選填" />
+        </div>
+        <div className="btn-row">
+          {initial && <button className="btn danger" onClick={()=>onDelete(initial.id)}>刪除</button>}
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddActionSheet({onPick, onClose}){
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>新增一筆</h2>
+        <div className="action-row">
+          <button className="action-btn transfer" onClick={()=>onPick("transfer")}>
+            <span className="ic">🔁</span><span>轉帳</span>
+          </button>
+          <button className="action-btn expense" onClick={()=>onPick("expense")}>
+            <span className="ic">↑</span><span>支出</span>
+          </button>
+          <button className="action-btn income" onClick={()=>onPick("income")}>
+            <span className="ic">↓</span><span>收入</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CategoryModal({initial, parentId, type, onSave, onClose}){
+  const [name, setName] = useState((initial&&initial.name)||"");
+  const [icon, setIcon] = useState((initial&&initial.icon)||"🔖");
+  const [color, setColor] = useState((initial&&initial.color)||PALETTE[Math.floor(Math.random()*PALETTE.length)]);
+  function submit(){
+    if(!name.trim()){ alert("請輸入分類名稱"); return; }
+    const c = /^#[0-9A-Fa-f]{6}$/.test(color.trim()) ? color.trim() : (initial&&initial.color) || PALETTE[0];
+    onSave({name:name.trim(), icon: icon||"🔖", type, parentId: parentId||null, color:c});
+  }
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>{initial?"編輯分類":"新增分類"}</h2>
+        <div className="field">
+          <label>名稱</label>
+          <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="例如：咖啡" />
+        </div>
+        <div className="field">
+          <label>圖示 (emoji)</label>
+          <input type="text" value={icon} onChange={e=>setIcon(e.target.value)} placeholder="🔖" />
+        </div>
+        <div className="field">
+          <label>圖表顏色（色碼，分析頁圓餅圖會用這個顏色）</label>
+          <div style={{display:"flex", alignItems:"center", gap:10}}>
+            <div style={{width:28,height:28,borderRadius:"50%",background:/^#[0-9A-Fa-f]{6}$/.test(color)?color:"#ccc",flexShrink:0,border:"1px solid var(--line)"}}></div>
+            <input type="text" value={color} onChange={e=>setColor(e.target.value)} placeholder="#B98C82" style={{flex:1}} />
+          </div>
+        </div>
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BudgetModal({category, current, onSave, onClose}){
+  const [val, setVal] = useState(current?String(current):"");
+  function submit(){
+    const n = parseFloat(val);
+    onSave(category.id, n>0?n:null);
+  }
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>{category.icon} {category.name} 的月預算</h2>
+        <div className="field">
+          <label>每月預算上限（NT$，留空＝不設定）</label>
+          <input type="number" inputMode="decimal" value={val} onChange={e=>setVal(e.target.value)} placeholder="例如 3000" />
+        </div>
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccountModal({initial, defaultType, accounts, onSave, onClose}){
+  const [name, setName] = useState((initial&&initial.name)||"");
+  const [type, setType] = useState((initial&&initial.type)||defaultType||"checking");
+  const [icon, setIcon] = useState((initial&&initial.icon)||accTypeInfo(defaultType||"checking").icon);
+  const [iconImage, setIconImage] = useState((initial&&initial.iconImage)||null);
+  const [balance, setBalance] = useState(initial?String(initial.initialBalance||0):"0");
+  const [rate, setRate] = useState(initial?String(initial.rate||""):"");
+  const [startDate, setStartDate] = useState((initial&&initial.startDate)||toDateStr(new Date()));
+  const [endDate, setEndDate] = useState((initial&&initial.endDate)||"");
+  const [interestAccountId, setInterestAccountId] = useState((initial&&initial.interestAccountId)||"");
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFile(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    setUploading(true);
+    try{
+      const dataUrl = type==="credit" ? await fileToIconDataURL(file, 92, 58) : await fileToIconDataURL(file, 56, 56);
+      setIconImage(dataUrl);
+    }catch(err){ alert("圖片讀取失敗"); }
+    setUploading(false);
+  }
+
+  function submit(){
+    if(!name.trim()){ alert("請輸入帳戶名稱"); return; }
+    const n = parseFloat(balance);
+    const r = parseFloat(rate);
+    onSave({
+      name:name.trim(), type, icon, iconImage, initialBalance: isNaN(n)?0:n,
+      rate: type==="fixed" ? (isNaN(r)?0:r) : null,
+      startDate: type==="fixed" ? (startDate||null) : null,
+      endDate: type==="fixed" ? (endDate||null) : null,
+      interestAccountId: type==="fixed" ? (interestAccountId||null) : null,
+    });
+  }
+
+  const previewPrincipal = parseFloat(balance)||0;
+  const previewRate = parseFloat(rate)||0;
+  const previewMonthlyInterest = previewPrincipal * previewRate/100/12;
+  const nonFixedAccounts = accounts.filter(a=>a.type!=="fixed" && a.id!==(initial&&initial.id));
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>{initial?"編輯帳戶":"新增帳戶"}</h2>
+        <div className="field">
+          <label>類型</label>
+          <select value={type} onChange={e=>setType(e.target.value)}>
+            {ACCOUNT_TYPES.map(t=><option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>帳戶名稱</label>
+          <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="例如：玉山銀行" />
+        </div>
+        <div className="field">
+          <label>圖示</label>
+          <div style={{display:"flex", alignItems:"center", gap:10}}>
+            <div className={"acc-icon"+(type==="credit"?" card-shape":"")} style={type==="credit"?{}:{width:40,height:40}}>
+              {iconImage ? <img src={iconImage} alt="" style={{width:"100%",height:"100%",borderRadius:type==="credit"?5:"50%",objectFit:"cover"}} /> : icon}
+            </div>
+            <input type="text" value={icon} onChange={e=>setIcon(e.target.value)} placeholder="emoji" style={{flex:1}} />
+          </div>
+          <label style={{marginTop:8}}>或上傳圖片當圖示</label>
+          <input type="file" accept="image/*" onChange={handleFile} />
+          {iconImage && <button className="btn ghost" style={{marginTop:8}} onClick={()=>setIconImage(null)}>移除圖片，改用 emoji</button>}
+          {uploading && <div style={{fontSize:13,color:"var(--ink-soft)",marginTop:4}}>處理中...</div>}
+        </div>
+        <div className="field">
+          <label>{type==="credit"?"目前欠款（NT$）":type==="fixed"?"定存金額（NT$）":"目前餘額（NT$）"}</label>
+          <input type="number" inputMode="decimal" value={balance} onChange={e=>setBalance(e.target.value)} placeholder="0" />
+        </div>
+        {type==="fixed" &&
+          <React.Fragment>
+            <div className="field">
+              <label>利率（年利率 %，固定）</label>
+              <input type="number" inputMode="decimal" step="0.001" value={rate} onChange={e=>setRate(e.target.value)} placeholder="例如 1.735" />
+            </div>
+            <div className="field">
+              <label>定存起始日</label>
+              <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>到期日</label>
+              <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>利息存入帳戶</label>
+              <select value={interestAccountId} onChange={e=>setInterestAccountId(e.target.value)}>
+                <option value="">（存在定存帳戶本身）</option>
+                {ACCOUNT_TYPES.filter(t=>t.key!=="fixed").map(t=>{
+                  const group = nonFixedAccounts.filter(a=>a.type===t.key);
+                  if(group.length===0) return null;
+                  return (
+                    <optgroup key={t.key} label={t.icon+" "+t.label}>
+                      {group.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+                    </optgroup>
+                  );
+                })}
+              </select>
+            </div>
+            {previewPrincipal>0 && previewRate>0 &&
+              <div style={{fontSize:14, color:"var(--ink-soft)", marginBottom:14}}>
+                預估每月利息：<b style={{color:"var(--ink)"}}>{fmtMoney(previewMonthlyInterest)}</b>
+                （{fmtMoney(previewPrincipal)} × {previewRate}% ÷ 12）
+              </div>
+            }
+          </React.Fragment>
+        }
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InvestmentModal({initial, onSave, onClose}){
+  const [symbol, setSymbol] = useState((initial&&initial.symbol)||"");
+  const [name, setName] = useState((initial&&initial.name)||"");
+  const [shares, setShares] = useState(initial?String(initial.shares):"");
+  const [avgCost, setAvgCost] = useState(initial?String(initial.avgCost):"");
+  const [currentPrice, setCurrentPrice] = useState(initial?String(initial.currentPrice):"");
+  const [totalDividends, setTotalDividends] = useState(initial?String(initial.totalDividends||0):"0");
+
+  function submit(){
+    if(!symbol.trim()){ alert("請輸入股票代號"); return; }
+    const s = parseFloat(shares), c = parseFloat(avgCost), p = parseFloat(currentPrice), d = parseFloat(totalDividends);
+    onSave({
+      symbol: symbol.trim(), name: name.trim()||symbol.trim(),
+      shares: isNaN(s)?0:s, avgCost: isNaN(c)?0:c, currentPrice: isNaN(p)?0:p,
+      totalDividends: isNaN(d)?0:d,
+      updatedAt: toDateStr(new Date()),
+    });
+  }
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>{initial?"編輯持股":"新增持股"}</h2>
+        <div className="field">
+          <label>股票代號</label>
+          <input type="text" value={symbol} onChange={e=>setSymbol(e.target.value)} placeholder="例如：0050" />
+        </div>
+        <div className="field">
+          <label>名稱</label>
+          <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="例如：元大台灣50" />
+        </div>
+        <div className="field">
+          <label>總股數</label>
+          <input type="number" inputMode="decimal" value={shares} onChange={e=>setShares(e.target.value)} placeholder="0" />
+        </div>
+        <div className="field">
+          <label>成交均價（每股，NT$）</label>
+          <input type="number" inputMode="decimal" value={avgCost} onChange={e=>setAvgCost(e.target.value)} placeholder="0" />
+        </div>
+        <div className="field">
+          <label>市價（每股，NT$，自己更新）</label>
+          <input type="number" inputMode="decimal" value={currentPrice} onChange={e=>setCurrentPrice(e.target.value)} placeholder="0" />
+        </div>
+        <div className="field">
+          <label>總配息（累計，NT$）</label>
+          <input type="number" inputMode="decimal" value={totalDividends} onChange={e=>setTotalDividends(e.target.value)} placeholder="0" />
+        </div>
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- 主分頁 ---------- */
+function OverviewTab({categories, accounts, monthTx, allTx, periodLabel, onViewTx, onAdd}){
+  const label = periodLabel || "本月";
+  const [query, setQuery] = useState("");
+  const isSearching = query.trim().length > 0;
+
+  const income = monthTx.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
+  const expense = monthTx.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+  const balance = income - expense;
+
+  const searchResults = useMemo(()=>{
+    if(!isSearching) return [];
+    const q = query.trim().toLowerCase();
+    const pool = allTx || monthTx;
+    return pool.filter(t=>{
+      const cat = catById(categories, t.categoryId);
+      const acc = t.type==="transfer"
+        ? (catById(accounts, t.fromAccountId)||{name:""}).name + " " + (catById(accounts, t.toAccountId)||{name:""}).name
+        : (catById(accounts, t.accountId)||{name:""}).name;
+      const catName = cat ? cat.name : "";
+      const note = t.note || "";
+      const amt = String(Math.round(t.amount));
+      return catName.toLowerCase().includes(q) || acc.toLowerCase().includes(q) ||
+             note.toLowerCase().includes(q) || amt.includes(q) ||
+             (t.counterpart||"").toLowerCase().includes(q);
+    }).slice().sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
+  }, [query, allTx, monthTx, categories, accounts]);
+
+  const dayGroups = useMemo(()=> isSearching ? [] : groupByDate(monthTx), [monthTx, isSearching]);
+  const searchGroups = useMemo(()=> isSearching ? groupByDate(searchResults) : [], [searchResults, isSearching]);
+
+  return (
+    <div>
+      <div className="summary-cards">
+        <div className="summary-card income"><div className="label">{label}收入</div><div className="value">{fmtMoney(income)}</div></div>
+        <div className="summary-card expense"><div className="label">{label}支出</div><div className="value">{fmtMoney(expense)}</div></div>
+        <div className="summary-card"><div className="label">{label}結餘</div><div className="value">{fmtMoney(balance)}</div></div>
+      </div>
+
+      <div className="search-bar-wrap">
+        <span className="search-icon">🔍</span>
+        <input type="text" value={query} onChange={e=>setQuery(e.target.value)}
+          placeholder="搜尋分類、帳戶、備註或金額…" />
+        {query && <button className="search-clear" onClick={()=>setQuery("")}>✕</button>}
+      </div>
+
+      {isSearching ?
+        <React.Fragment>
+          <div className="section-title">搜尋結果（{searchResults.length} 筆）</div>
+          {searchResults.length===0 && <div className="empty-hint">找不到符合的交易</div>}
+          {searchGroups.map(g=>
+            <React.Fragment key={g.date}>
+              <div className="day-group-header">{formatDayLabel(g.date)}</div>
+              {g.items.map(t=>
+                <TxRow key={t.id} t={t} categories={categories} accounts={accounts} onClick={()=>onViewTx(t)} />
+              )}
+            </React.Fragment>
+          )}
+        </React.Fragment>
+        :
+        <React.Fragment>
+          <div className="section-title">{label}交易</div>
+          {dayGroups.length===0 && <div className="empty-hint">這段時間還沒有任何紀錄，點右下角「＋」新增一筆吧</div>}
+          {dayGroups.map(g=>
+            <React.Fragment key={g.date}>
+              <div className="day-group-header">{formatDayLabel(g.date)}</div>
+              {g.items.map(t=>
+                <TxRow key={t.id} t={t} categories={categories} accounts={accounts} onClick={()=>onViewTx(t)} />
+              )}
+            </React.Fragment>
+          )}
+        </React.Fragment>
+      }
+    </div>
+  );
+}
+
+function CalendarTab({categories, accounts, monthTx, cursorMonth, onAddOnDate, onViewTx}){
+  const [activeDay, setActiveDay] = useState(null);
+  const dim = daysInMonth(cursorMonth);
+  const firstDow = new Date(cursorMonth.getFullYear(), cursorMonth.getMonth(), 1).getDay();
+  const todayStr = toDateStr(new Date());
+  const cells = [];
+  for(let i=0;i<firstDow;i++) cells.push(null);
+  for(let d=1;d<=dim;d++) cells.push(d);
+
+  function txOnDay(d){
+    const ds = cursorMonth.getFullYear()+"-"+pad(cursorMonth.getMonth()+1)+"-"+pad(d);
+    return monthTx.filter(t=>t.date===ds).slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  }
+
+  const dayList = activeDay? txOnDay(activeDay) : [];
+  const activeDs = activeDay? cursorMonth.getFullYear()+"-"+pad(cursorMonth.getMonth()+1)+"-"+pad(activeDay) : null;
+
+  return (
+    <div>
+      <div className="calendar-grid">
+        {["日","一","二","三","四","五","六"].map(w=><div className="cal-dow" key={w}>{w}</div>)}
+        {cells.map((d,i)=>{
+          if(d===null) return <div className="cal-cell empty" key={i}></div>;
+          const ds = cursorMonth.getFullYear()+"-"+pad(cursorMonth.getMonth()+1)+"-"+pad(d);
+          const dayTx = txOnDay(d);
+          const incomeSum = dayTx.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
+          const expenseSum = dayTx.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+          return (
+            <div key={i} className={"cal-cell"+(ds===todayStr?" today":"")} onClick={()=>setActiveDay(d)}>
+              <span className="cal-day-num">{d}</span>
+              {incomeSum>0 && <span className="cal-num income">{Math.round(incomeSum)}</span>}
+              {expenseSum>0 && <span className="cal-num expense">{Math.round(expenseSum)}</span>}
+            </div>
+          );
+        })}
+      </div>
+
+      {activeDay &&
+        <div className="sheet-overlay" onClick={()=>setActiveDay(null)}>
+          <div className="sheet" onClick={e=>e.stopPropagation()}>
+            <div className="sheet-handle"></div>
+            <h2>{cursorMonth.getMonth()+1}月{activeDay}日</h2>
+            {dayList.length===0 && <div className="empty-hint">這天還沒有紀錄</div>}
+            {dayList.map(t=>
+              <TxRow key={t.id} t={t} categories={categories} accounts={accounts}
+                onClick={()=>{setActiveDay(null); onViewTx(t);}} />
+            )}
+            <div className="btn-row">
+              <button className="btn ghost" onClick={()=>setActiveDay(null)}>關閉</button>
+              <button className="btn primary" onClick={()=>{onAddOnDate(activeDs); setActiveDay(null);}}>＋ 在這天新增</button>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  );
+}
+
+function AnalysisTab({categories, transactions}){
+  const [mode, setMode] = useState("month");
+  const [aMonth, setAMonth] = useState(()=>{const d=new Date(); d.setDate(1); return d;});
+  const [aYear, setAYear] = useState(()=>new Date().getFullYear());
+  const [customStart, setCustomStart] = useState(()=>{const d=new Date(); d.setDate(1); return toDateStr(d);});
+  const [customEnd, setCustomEnd] = useState(()=>toDateStr(new Date()));
+  const [pickIndex, setPickIndex] = useState(null);
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+
+  useEffect(()=>{ setPickIndex(null); }, [mode, aMonth, aYear, customStart, customEnd]);
+
+  function prevAMonth(){ setAMonth(d=>{const nd=new Date(d); nd.setMonth(nd.getMonth()-1); return nd;}); }
+  function nextAMonth(){ setAMonth(d=>{const nd=new Date(d); nd.setMonth(nd.getMonth()+1); return nd;}); }
+  function prevAYear(){ setAYear(y=>y-1); }
+  function nextAYear(){ setAYear(y=>y+1); }
+
+  const monthData = useMemo(()=>{
+    const key = monthKey(aMonth);
+    const tx = transactions.filter(t=>t.date.slice(0,7)===key);
+    const dim = daysInMonth(aMonth);
+    const daily = [];
+    for(let d=1;d<=dim;d++){
+      const ds = key+"-"+pad(d);
+      const income = tx.filter(t=>t.type==="income"&&t.date===ds).reduce((s,t)=>s+t.amount,0);
+      const expense = tx.filter(t=>t.type==="expense"&&t.date===ds).reduce((s,t)=>s+t.amount,0);
+      daily.push({label:String(d), income, expense, value: income-expense});
+    }
+    const byCat = {};
+    tx.filter(t=>t.type==="expense").forEach(t=>{
+      byCat[t.categoryId] = (byCat[t.categoryId]||0) + t.amount;
+    });
+    return {daily, byCat, tx};
+  }, [transactions, aMonth]);
+
+  const yearData = useMemo(()=>{
+    const months = [];
+    for(let m=0;m<12;m++){
+      const key = aYear+"-"+pad(m+1);
+      const tx = transactions.filter(t=>t.date.slice(0,7)===key);
+      months.push({
+        label:(m+1)+"月",
+        income: tx.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0),
+        expense: tx.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0),
+      });
+    }
+    const byCat = {};
+    transactions.filter(t=>t.type==="expense" && t.date.slice(0,4)===String(aYear)).forEach(t=>{
+      byCat[t.categoryId] = (byCat[t.categoryId]||0) + t.amount;
+    });
+    return {months, byCat};
+  }, [transactions, aYear]);
+
+  const customData = useMemo(()=>{
+    if(customEnd < customStart) return {chart:[], byCat:{}, granularity:"day"};
+    const tx = transactions.filter(t=>t.date>=customStart && t.date<=customEnd);
+    const byCat = {};
+    tx.filter(t=>t.type==="expense").forEach(t=>{
+      byCat[t.categoryId] = (byCat[t.categoryId]||0) + t.amount;
+    });
+    const startD = fromDateStr(customStart);
+    const endD = fromDateStr(customEnd);
+    const dayCount = Math.round((endD-startD)/86400000)+1;
+    if(dayCount<=92){
+      const daily = [];
+      for(let i=0;i<dayCount;i++){
+        const d = new Date(startD); d.setDate(d.getDate()+i);
+        const ds = toDateStr(d);
+        const income = tx.filter(t=>t.type==="income"&&t.date===ds).reduce((s,t)=>s+t.amount,0);
+        const expense = tx.filter(t=>t.type==="expense"&&t.date===ds).reduce((s,t)=>s+t.amount,0);
+        daily.push({label:(d.getMonth()+1)+"/"+d.getDate(), income, expense, value: income-expense});
+      }
+      return {chart:daily, byCat, granularity:"day"};
+    }
+    const map = {};
+    tx.forEach(t=>{
+      const mk = t.date.slice(0,7);
+      if(!map[mk]) map[mk] = {income:0, expense:0};
+      if(t.type==="income") map[mk].income += t.amount;
+      else if(t.type==="expense") map[mk].expense += t.amount;
+    });
+    const keys = Object.keys(map).sort();
+    const chart = keys.map(k=>({label:k.slice(5,7)+"月", income:map[k].income, expense:map[k].expense, value:map[k].income-map[k].expense}));
+    return {chart, byCat, granularity:"month"};
+  }, [transactions, customStart, customEnd]);
+
+  function donutData(byCat){
+    const entries = Object.entries(byCat).map(([id,val])=>{
+      const cat = catById(categories, id);
+      return {id, value:val, name: cat?cat.name:"未分類", color: cat?cat.color:"#ccc"};
+    }).sort((a,b)=>b.value-a.value);
+    if(entries.length>6){
+      const top = entries.slice(0,6);
+      const restVal = entries.slice(6).reduce((s,e)=>s+e.value,0);
+      top.push({id:"_rest", value:restVal, name:"其他", color:"#B8AFA2"});
+      return top;
+    }
+    return entries;
+  }
+
+  const data = mode==="month" ? donutData(monthData.byCat) : mode==="year" ? donutData(yearData.byCat) : donutData(customData.byCat);
+  const periodLabel = mode==="month" ? "本月" : mode==="year" ? "本年" : "區間";
+
+  return (
+    <div>
+      <div className="mode-toggle">
+        <button className={mode==="month"?"active":""} onClick={()=>setMode("month")}>本月</button>
+        <button className={mode==="year"?"active":""} onClick={()=>setMode("year")}>本年</button>
+        <button className={mode==="custom"?"active":""} onClick={()=>setMode("custom")}>自訂</button>
+      </div>
+
+      {mode==="month" &&
+        <MonthSwitcher date={aMonth} onPrev={prevAMonth} onNext={nextAMonth} onJump={()=>setShowMonthPicker(true)} />
+      }
+      {mode==="year" &&
+        <YearSwitcher year={aYear} onPrev={prevAYear} onNext={nextAYear} />
+      }
+      {mode==="custom" &&
+        <div className="date-range-row">
+          <input type="date" value={customStart} onChange={e=>setCustomStart(e.target.value)} />
+          <span>～</span>
+          <input type="date" value={customEnd} onChange={e=>setCustomEnd(e.target.value)} />
+        </div>
+      }
+
+      {mode==="month" &&
+        <div className="chart-card">
+          <h3>每日收支淨額</h3>
+          <BarChart data={monthData.daily} onPick={setPickIndex} selectedIndex={pickIndex} />
+          {pickIndex!=null && monthData.daily[pickIndex] ?
+            <div className="chart-detail">
+              <span className="lbl">{aMonth.getMonth()+1}月{monthData.daily[pickIndex].label}日</span>
+              <span>收入 <b style={{color:"var(--income)"}}>{fmtMoney(monthData.daily[pickIndex].income)}</b>　支出 <b style={{color:"var(--expense)"}}>{fmtMoney(monthData.daily[pickIndex].expense)}</b></span>
+            </div>
+            : <div className="chart-hint">點長條圖看當天收支明細</div>
+          }
+        </div>
+      }
+      {mode==="year" &&
+        <div className="chart-card">
+          <h3>每月收支（淺色收入／深色支出）</h3>
+          <GroupedBarChart months={yearData.months} onPick={setPickIndex} selectedIndex={pickIndex} />
+          {pickIndex!=null && yearData.months[pickIndex] ?
+            <div className="chart-detail">
+              <span className="lbl">{yearData.months[pickIndex].label}</span>
+              <span>收入 <b style={{color:"var(--income)"}}>{fmtMoney(yearData.months[pickIndex].income)}</b>　支出 <b style={{color:"var(--expense)"}}>{fmtMoney(yearData.months[pickIndex].expense)}</b></span>
+            </div>
+            : <div className="chart-hint">點長條圖看當月收支明細</div>
+          }
+        </div>
+      }
+      {mode==="custom" &&
+        <div className="chart-card">
+          <h3>{customData.granularity==="day"?"每日收支淨額":"每月收支（淺色收入／深色支出）"}</h3>
+          {customEnd < customStart ? <div className="empty-hint">結束日期不能早於起始日期</div> :
+           customData.chart.length===0 ? <div className="empty-hint">這段期間還沒有紀錄</div> :
+            <React.Fragment>
+              {customData.granularity==="day" ?
+                <BarChart data={customData.chart} onPick={setPickIndex} selectedIndex={pickIndex} />
+                :
+                <GroupedBarChart months={customData.chart} onPick={setPickIndex} selectedIndex={pickIndex} />
+              }
+              {pickIndex!=null && customData.chart[pickIndex] ?
+                <div className="chart-detail">
+                  <span className="lbl">{customData.chart[pickIndex].label}</span>
+                  <span>收入 <b style={{color:"var(--income)"}}>{fmtMoney(customData.chart[pickIndex].income)}</b>　支出 <b style={{color:"var(--expense)"}}>{fmtMoney(customData.chart[pickIndex].expense)}</b></span>
+                </div>
+                : <div className="chart-hint">點長條圖看明細</div>
+              }
+            </React.Fragment>
+          }
+        </div>
+      }
+
+      <div className="chart-card">
+        <h3>{periodLabel}支出分類佔比</h3>
+        {data.length===0 ? <div className="empty-hint">還沒有支出紀錄</div> :
+          <div className="donut-wrap">
+            <Donut data={data} />
+            <div className="donut-legend">
+              {data.map(d=>(
+                <div className="legend-row" key={d.id}>
+                  <span className="legend-dot" style={{background:d.color}}></span>
+                  <span className="name">{d.name}</span>
+                  <span className="val">{fmtMoney(d.value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        }
+      </div>
+      {showMonthPicker &&
+        <MonthPickerSheet year={aMonth.getFullYear()} month={aMonth.getMonth()+1}
+          onPick={(y,m)=>setAMonth(new Date(y,m-1,1))}
+          onClose={()=>setShowMonthPicker(false)} />
+      }
+    </div>
+  );
+}
+
+function CategoryActionSheet({node, onAddChild, onEdit, onDelete, onClose}){
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>{node.icon} {node.name}</h2>
+        <div className="action-list">
+          <button className="action-list-item" onClick={()=>{onClose(); onAddChild(node);}}>＋ 新增子分類</button>
+          <button className="action-list-item" onClick={()=>{onClose(); onEdit(node);}}>✏️ 編輯</button>
+          <button className="action-list-item danger" onClick={()=>{onClose(); onDelete(node);}}>🗑 刪除</button>
+        </div>
+        <button className="btn ghost" style={{width:"100%"}} onClick={onClose}>取消</button>
+      </div>
+    </div>
+  );
+}
+
+function CategoryNode({node, depth, dragHandlers, onAddChild, onEdit, onDelete, onReorderGroup}){
+  const [showActions, setShowActions] = useState(false);
+  return (
+    <div className="cat-node">
+      <div className="cat-row">
+        <span className="drag-handle" {...dragHandlers}>≡</span>
+        <span className="dot" style={{background:node.color}}></span>
+        <span className="name">{node.icon} {node.name}</span>
+        <button className="icon-btn more-btn" onClick={()=>setShowActions(true)}>⋯</button>
+      </div>
+      {node.children.length>0 &&
+        <div className="cat-children">
+          <DragList items={node.children}
+            onReorder={onReorderGroup}
+            renderRow={(child, childDragHandlers)=>
+              <CategoryNode node={child} depth={depth+1} dragHandlers={childDragHandlers}
+                onAddChild={onAddChild} onEdit={onEdit} onDelete={onDelete} onReorderGroup={onReorderGroup} />
+            } />
+        </div>
+      }
+      {showActions &&
+        <CategoryActionSheet node={node}
+          onAddChild={onAddChild} onEdit={onEdit} onDelete={onDelete}
+          onClose={()=>setShowActions(false)} />
+      }
+    </div>
+  );
+}
+
+function CategoriesSection({categories, onAddCategory, onEditCategory, onDeleteCategory, onReorderCategoryGroup}){
+  const [catModal, setCatModal] = useState(null); // {mode:'add'|'edit', type, parentId, initial}
+
+  const expenseTree = buildTree(categories.filter(c=>c.type==="expense"));
+  const incomeTree = buildTree(categories.filter(c=>c.type==="income"));
+
+  function handleDelete(node){
+    if(node.children.length>0){ alert("請先刪除子分類"); return; }
+    if(!confirm("確定刪除「"+node.name+"」？已使用此分類的交易仍會保留分類ID，但顯示會變成未分類。")) return;
+    onDeleteCategory(node.id);
+  }
+
+  return (
+    <div>
+      <div className="cat-section">
+        <div className="cat-section-title">
+          <h3>支出分類</h3>
+          <button onClick={()=>setCatModal({type:"expense", parentId:null})}>＋ 新增大分類</button>
+        </div>
+        <DragList items={expenseTree}
+          onReorder={onReorderCategoryGroup}
+          renderRow={(n, dragHandlers)=>
+            <CategoryNode node={n} depth={0} dragHandlers={dragHandlers}
+              onAddChild={(p)=>setCatModal({type:"expense", parentId:p.id})}
+              onEdit={(c)=>setCatModal({type:"expense", parentId:c.parentId, initial:c})}
+              onDelete={handleDelete}
+              onReorderGroup={onReorderCategoryGroup} />
+          } />
+      </div>
+
+      <div className="cat-section">
+        <div className="cat-section-title">
+          <h3>收入分類</h3>
+          <button onClick={()=>setCatModal({type:"income", parentId:null})}>＋ 新增大分類</button>
+        </div>
+        <DragList items={incomeTree}
+          onReorder={onReorderCategoryGroup}
+          renderRow={(n, dragHandlers)=>
+            <CategoryNode node={n} depth={0} dragHandlers={dragHandlers}
+              onAddChild={(p)=>setCatModal({type:"income", parentId:p.id})}
+              onEdit={(c)=>setCatModal({type:"income", parentId:c.parentId, initial:c})}
+              onDelete={handleDelete}
+              onReorderGroup={onReorderCategoryGroup} />
+          } />
+      </div>
+
+      {catModal &&
+        <CategoryModal type={catModal.type} parentId={catModal.parentId} initial={catModal.initial}
+          onClose={()=>setCatModal(null)}
+          onSave={(data)=>{
+            if(catModal.initial) onEditCategory(catModal.initial.id, data);
+            else onAddCategory(data);
+            setCatModal(null);
+          }} />
+      }
+    </div>
+  );
+}
+
+function AccountRow({acc, transactions, dragHandlers, onView, onEdit, onDelete}){
+  const bal = accountBalance(acc, transactions);
+  const neg = isLiability(acc.type) ? bal>0 : bal<0;
+  const isFixed = acc.type==="fixed" && acc.rate;
+  return (
+    <div className="acc-row">
+      <span className="drag-handle" {...dragHandlers}>≡</span>
+      <div className="acc-row-main" onClick={()=>onView(acc)}>
+        <div className={"acc-icon"+(acc.type==="credit"?" card-shape":"")}>
+          {acc.iconImage ? <img src={acc.iconImage} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : (acc.icon||"💰")}
+        </div>
+        <div className="acc-name-wrap">
+          <span className="name">{acc.name}</span>
+          {isFixed && <span className="acc-sub">利率 {acc.rate}%・每月利息 {fmtMoney(monthlyInterest(acc))}</span>}
+        </div>
+        <span className={"bal"+(neg?" neg":"")}>{fmtMoney(Math.abs(bal))}</span>
+      </div>
+      <button className="icon-btn" onClick={()=>onEdit(acc)}>✏️</button>
+      <button className="icon-btn" onClick={()=>onDelete(acc)}>🗑</button>
+    </div>
+  );
+}
+
+function AccountDetailSheet({acc, transactions, categories, accounts, onViewTx, onClose}){
+  const [yearFilter, setYearFilter] = useState("all");
+
+  const acctTx = useMemo(()=>{
+    return transactions.filter(t=>
+      t.type==="transfer" ? (t.fromAccountId===acc.id || t.toAccountId===acc.id) : t.accountId===acc.id
+    );
+  }, [transactions, acc.id]);
+
+  const years = useMemo(()=>{
+    const set = new Set(acctTx.map(t=>t.date.slice(0,4)));
+    return Array.from(set).sort((a,b)=>b.localeCompare(a));
+  }, [acctTx]);
+
+  const filteredTx = useMemo(()=>{
+    if(yearFilter==="all") return acctTx;
+    return acctTx.filter(t=>t.date.slice(0,4)===yearFilter);
+  }, [acctTx, yearFilter]);
+
+  const totalIncome = filteredTx.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
+  const totalExpense = filteredTx.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+  const totalTransferIn = filteredTx.filter(t=>t.type==="transfer" && t.toAccountId===acc.id).reduce((s,t)=>s+t.amount,0);
+  const totalTransferOut = filteredTx.filter(t=>t.type==="transfer" && t.fromAccountId===acc.id).reduce((s,t)=>s+t.amount,0);
+  const currentBalance = accountBalance(acc, transactions);
+
+  const byCat = {};
+  filteredTx.filter(t=>t.type==="expense").forEach(t=>{
+    byCat[t.categoryId] = (byCat[t.categoryId]||0) + t.amount;
+  });
+  const catEntries = Object.entries(byCat).map(([id,val])=>{
+    const cat = catById(categories, id);
+    return {id, value:val, name: cat?cat.name:"未分類", color: cat?cat.color:"#ccc"};
+  }).sort((a,b)=>b.value-a.value);
+  const donutData = catEntries.length>6 ?
+    [...catEntries.slice(0,6), {id:"_rest", value:catEntries.slice(6).reduce((s,e)=>s+e.value,0), name:"其他", color:"#B8AFA2"}]
+    : catEntries;
+
+  const dayGroups = groupByDate(filteredTx);
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="detail-header">
+          <h2 className="detail-title">{acc.icon} {acc.name}</h2>
+          <button className="detail-close-x" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="acc-detail-balance">
+          <div className="nw-label">目前餘額</div>
+          <div className="nw-value">{fmtMoney(currentBalance)}</div>
+          {acc.type==="fixed" && acc.rate &&
+            <div className="acc-sub">利率 {acc.rate}%・{acc.startDate} ~ {acc.endDate}</div>
+          }
+        </div>
+
+        <div className="acc-detail-stats">
+          <div className="stat"><span>總收入</span><b className="pos">{fmtMoney(totalIncome)}</b></div>
+          <div className="stat"><span>總支出</span><b className="neg">{fmtMoney(totalExpense)}</b></div>
+          <div className="stat"><span>總轉入</span><b>{fmtMoney(totalTransferIn)}</b></div>
+          <div className="stat"><span>總轉出</span><b>{fmtMoney(totalTransferOut)}</b></div>
+        </div>
+
+        {years.length>0 &&
+          <div className="acc-detail-year-row">
+            <select value={yearFilter} onChange={e=>setYearFilter(e.target.value)}>
+              <option value="all">全部時間</option>
+              {years.map(y=><option key={y} value={y}>{y}年</option>)}
+            </select>
+          </div>
+        }
+
+        {donutData.length>0 &&
+          <div className="chart-card">
+            <h3>支出分類佔比</h3>
+            <div className="donut-wrap">
+              <Donut data={donutData} />
+              <div className="donut-legend">
+                {donutData.map(d=>(
+                  <div className="legend-row" key={d.id}>
+                    <span className="legend-dot" style={{background:d.color}}></span>
+                    <span className="name">{d.name}</span>
+                    <span className="val">{fmtMoney(d.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        }
+
+        <div className="section-title">交易明細</div>
+        {dayGroups.length===0 && <div className="empty-hint">這段時間沒有相關交易</div>}
+        {dayGroups.map(g=>
+          <React.Fragment key={g.date}>
+            <div className="day-group-header">{formatDayLabel(g.date)}</div>
+            {g.items.map(t=>
+              <TxRow key={t.id} t={t} categories={categories} accounts={accounts} onClick={()=>onViewTx(t)} />
+            )}
+          </React.Fragment>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AccountsSection({accounts, transactions, categories, onViewTx, onAddAccount, onEditAccount, onDeleteAccount, onReorderGroup}){
+  const [modal, setModal] = useState(null); // {initial, defaultType}
+  const [viewingAcc, setViewingAcc] = useState(null);
+
+  function handleDelete(acc){
+    if(!confirm("確定刪除「"+acc.name+"」？已記錄在這個帳戶的交易仍會保留，但不再計入任何帳戶餘額。")) return;
+    onDeleteAccount(acc.id);
+  }
+
+  return (
+    <div>
+      {ACCOUNT_TYPES.map(t=>{
+        const group = accounts.filter(a=>a.type===t.key).sort((a,b)=>(a.order||0)-(b.order||0));
+        return (
+          <div className="acc-section" key={t.key}>
+            <div className="acc-section-title">
+              <h3>{t.icon} {t.label}</h3>
+              <button onClick={()=>setModal({defaultType:t.key})}>＋ 新增{t.label}</button>
+            </div>
+            {group.length===0 && <div className="empty-hint">還沒有{t.label}帳戶</div>}
+            <DragList items={group}
+              onReorder={(newList)=>onReorderGroup(newList)}
+              renderRow={(acc, dragHandlers)=>
+                <AccountRow acc={acc} transactions={transactions} dragHandlers={dragHandlers}
+                  onView={(a)=>setViewingAcc(a)}
+                  onEdit={(a)=>setModal({initial:a})} onDelete={handleDelete} />
+              } />
+          </div>
+        );
+      })}
+
+      {modal &&
+        <AccountModal initial={modal.initial} defaultType={modal.defaultType} accounts={accounts}
+          onClose={()=>setModal(null)}
+          onSave={(data)=>{
+            if(modal.initial) onEditAccount(modal.initial.id, data);
+            else onAddAccount(data);
+            setModal(null);
+          }} />
+      }
+      {viewingAcc &&
+        <AccountDetailSheet acc={viewingAcc} transactions={transactions} categories={categories} accounts={accounts}
+          onViewTx={onViewTx}
+          onClose={()=>setViewingAcc(null)} />
+      }
+    </div>
+  );
+}
+
+function InvestmentRow({inv, onEdit, onDelete}){
+  const value = invMarketValue(inv);
+  const cost = invCostBasis(inv);
+  const gain = invGain(inv);
+  const pct = invReturnPct(inv);
+  const pos = gain>=0;
+  return (
+    <div className="inv-row">
+      <div className="inv-top">
+        <div>
+          <span className="inv-name">{inv.name}</span><span className="inv-code">{inv.symbol}</span>
+          <div className="inv-shares">總股數 {inv.shares}</div>
+        </div>
+        <span className={"inv-pct "+(pos?"pos":"neg")}>{pos?"+":""}{fmtMoney(gain)}（{pos?"+":""}{pct.toFixed(2)}%）</span>
+      </div>
+      <div className="inv-detail">
+        <div className="inv-detail-row"><span className="lbl">成交均價</span><span className="val">{inv.avgCost}</span></div>
+        <div className="inv-detail-row"><span className="lbl">現值</span><span className="val">{fmtMoney(value)}</span></div>
+        <div className="inv-detail-row"><span className="lbl">成本</span><span className="val">{fmtMoney(cost)}</span></div>
+        <div className="inv-detail-row"><span className="lbl">市價</span><span className="val">{inv.currentPrice}</span></div>
+        <div className="inv-detail-row"><span className="lbl">總配息</span><span className="val">{fmtMoney(inv.totalDividends||0)}</span></div>
+      </div>
+      <div className="inv-actions">
+        <button onClick={()=>onEdit(inv)}>✏️</button>
+        <button onClick={()=>onDelete(inv)}>🗑</button>
+      </div>
+    </div>
+  );
+}
+
+function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onDeleteInvestment}){
+  const [modal, setModal] = useState(null);
+  function handleDelete(inv){
+    if(!confirm("確定刪除「"+inv.name+"」這筆持股紀錄？")) return;
+    onDeleteInvestment(inv.id);
+  }
+  const totalValue = investments.reduce((s,i)=>s+invMarketValue(i),0);
+  const totalCost = investments.reduce((s,i)=>s+invCostBasis(i),0);
+  const totalGain = totalValue - totalCost;
+  const totalPct = totalCost>0 ? (totalGain/totalCost*100) : 0;
+  const totalDiv = investments.reduce((s,i)=>s+(i.totalDividends||0),0);
+  const posTotal = totalGain>=0;
+
+  return (
+    <div>
+      {investments.length>0 &&
+        <div className="inv-summary">
+          <div className="row"><span className="lbl">總現值</span><span className="val">{fmtMoney(totalValue)}</span></div>
+          <div className="row"><span className="lbl">總成本</span><span className="val">{fmtMoney(totalCost)}</span></div>
+          <div className="row"><span className="lbl">總損益（不含息）</span>
+            <span className={"val "+(posTotal?"pos":"neg")}>{posTotal?"+":""}{fmtMoney(totalGain)}（{posTotal?"+":""}{totalPct.toFixed(2)}%）</span></div>
+          <div className="row"><span className="lbl">總配息</span><span className="val">{fmtMoney(totalDiv)}</span></div>
+        </div>
+      }
+      <div className="acc-section">
+        <div className="acc-section-title">
+          <h3>📈 持股</h3>
+          <button onClick={()=>setModal({})}>＋ 新增持股</button>
+        </div>
+        {investments.length===0 && <div className="empty-hint">還沒有任何持股，先加一筆 0050 或 2330 試試</div>}
+        {investments.slice().sort((a,b)=>a.symbol.localeCompare(b.symbol)).map(inv=>
+          <InvestmentRow key={inv.id} inv={inv} onEdit={(i)=>setModal({initial:i})} onDelete={handleDelete} />
+        )}
+      </div>
+      {modal &&
+        <InvestmentModal initial={modal.initial}
+          onClose={()=>setModal(null)}
+          onSave={(data)=>{
+            if(modal.initial) onEditInvestment(modal.initial.id, data);
+            else onAddInvestment(data);
+            setModal(null);
+          }} />
+      }
+    </div>
+  );
+}
+
+function SettingsTab({categories, accounts, transactions, investments, onViewTx,
+  onAddCategory, onEditCategory, onDeleteCategory, onReorderCategoryGroup,
+  onAddAccount, onEditAccount, onDeleteAccount, onReorderGroup,
+  onAddInvestment, onEditInvestment, onDeleteInvestment}){
+  const [mode, setMode] = useState("account");
+  const [masked, setMasked] = useState(false);
+
+  const acctAssets = accounts.filter(a=>!isLiability(a.type)).reduce((s,a)=>s+accountBalance(a,transactions),0);
+  const liabilities = accounts.filter(a=>isLiability(a.type)).reduce((s,a)=>s+accountBalance(a,transactions),0);
+  const investAssets = investments.reduce((s,inv)=>s+invMarketValue(inv),0);
+  const assets = acctAssets + investAssets;
+  const netWorth = assets - liabilities;
+
+  return (
+    <div>
+      {(mode==="account"||mode==="invest") &&
+        <div className="networth-card">
+          <div className="nw-top">
+            <span className="nw-label">淨資產</span>
+            <button className="nw-mask-btn" onClick={()=>setMasked(m=>!m)}>{masked?"🙈":"👁"}</button>
+          </div>
+          <div className="nw-value">{maskMoney(netWorth, masked)}</div>
+          <div className="nw-split">
+            <span>資產 <b>{maskMoney(assets, masked)}</b></span>
+            <span>負債 <b>{maskMoney(liabilities, masked)}</b></span>
+          </div>
+        </div>
+      }
+      <div className="settings-mode-toggle">
+        <button className={mode==="category"?"active":""} onClick={()=>setMode("category")}>分類</button>
+        <button className={mode==="account"?"active":""} onClick={()=>setMode("account")}>帳戶</button>
+        <button className={mode==="invest"?"active":""} onClick={()=>setMode("invest")}>投資</button>
+      </div>
+      {mode==="category" &&
+        <CategoriesSection categories={categories}
+          onAddCategory={onAddCategory} onEditCategory={onEditCategory} onDeleteCategory={onDeleteCategory}
+          onReorderCategoryGroup={onReorderCategoryGroup} />
+      }
+      {mode==="account" &&
+        <AccountsSection accounts={accounts} transactions={transactions} categories={categories} onViewTx={onViewTx}
+          onAddAccount={onAddAccount} onEditAccount={onEditAccount} onDeleteAccount={onDeleteAccount} onReorderGroup={onReorderGroup} />
+      }
+      {mode==="invest" &&
+        <InvestmentsSection investments={investments}
+          onAddInvestment={onAddInvestment} onEditInvestment={onEditInvestment} onDeleteInvestment={onDeleteInvestment} />
+      }
+    </div>
+  );
+}
+
+/* ---------- App ---------- */
+function App(){
+  const [categories, setCategories] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [budgets, setBudgets] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [investments, setInvestments] = useState([]);
+  const [tab, setTab] = useState("home");
+  const [homeMode, setHomeMode] = useState("list");
+  const [cursorMonth, setCursorMonth] = useState(()=>{const d=new Date(); d.setDate(1); return d;});
+  const [homeRangeMode, setHomeRangeMode] = useState("month");
+  const [homeRangeStart, setHomeRangeStart] = useState(()=>{const d=new Date(); d.setDate(1); return toDateStr(d);});
+  const [homeRangeEnd, setHomeRangeEnd] = useState(()=>toDateStr(new Date()));
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const [addKind, setAddKind] = useState("txn");
+  const [editingTx, setEditingTx] = useState(null);
+  const [viewingTx, setViewingTx] = useState(null);
+  const [presetDate, setPresetDate] = useState(null);
+  const [presetType, setPresetType] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const [darkMode, setDarkMode] = useState(()=>{
+    try{
+      const saved = localStorage.getItem("theme");
+      if(saved) return saved==="dark";
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }catch(e){ return false; }
+  });
+  const seeded = useRef(false);
+  const seededAcc = useRef(false);
+
+  useEffect(()=>{
+    document.documentElement.classList.toggle("dark", darkMode);
+    try{ localStorage.setItem("theme", darkMode?"dark":"light"); }catch(e){}
+  }, [darkMode]);
+
+  useEffect(()=>{
+    const unsub = onSnapshot(collection(db,"categories"), snap=>{
+      const list = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      setCategories(list);
+      if(list.length===0 && !seeded.current){
+        seeded.current = true;
+        seedDefaultCategories();
+      }
+    });
+    return unsub;
+  }, []);
+
+  useEffect(()=>{
+    const unsub = onSnapshot(query(collection(db,"transactions"), orderBy("date","desc")), snap=>{
+      setTransactions(snap.docs.map(d=>({id:d.id, ...d.data()})));
+    });
+    return unsub;
+  }, []);
+
+  useEffect(()=>{
+    const unsub = onSnapshot(collection(db,"budgets"), snap=>{
+      setBudgets(snap.docs.map(d=>({id:d.id, ...d.data()})));
+    });
+    return unsub;
+  }, []);
+
+  useEffect(()=>{
+    const unsub = onSnapshot(collection(db,"accounts"), snap=>{
+      const list = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      setAccounts(list);
+      if(list.length===0 && !seededAcc.current){
+        seededAcc.current = true;
+        seedDefaultAccount();
+      }
+    });
+    return unsub;
+  }, []);
+
+  useEffect(()=>{
+    const unsub = onSnapshot(collection(db,"investments"), snap=>{
+      setInvestments(snap.docs.map(d=>({id:d.id, ...d.data()})));
+    });
+    return unsub;
+  }, []);
+
+  const generatingInterestRef = useRef(false);
+  async function generateDueInterest(){
+    if(generatingInterestRef.current) return;
+    const fixedAccounts = accounts.filter(a=>a.type==="fixed" && a.rate && a.startDate && a.endDate);
+    if(fixedAccounts.length===0) return;
+    generatingInterestRef.current = true;
+    try{
+      const today = new Date();
+      let interestCat = categories.find(c=>c.type==="income" && c.name==="利息" && !c.parentId);
+      let interestCatId = interestCat ? interestCat.id : null;
+      if(!interestCatId){
+        const siblings = categories.filter(c=>c.type==="income" && !c.parentId);
+        const maxOrder = siblings.reduce((m,c)=>Math.max(m, c.order||0), -1);
+        const ref = await addDoc(collection(db,"categories"), {
+          name:"利息", type:"income", icon:"💹", parentId:null,
+          color:PALETTE[siblings.length%PALETTE.length], order:maxOrder+1,
+        });
+        interestCatId = ref.id;
+      }
+      const batch = writeBatch(db);
+      let any = false;
+      fixedAccounts.forEach(acc=>{
+        const monthly = monthlyInterest(acc);
+        const targetAccountId = acc.interestAccountId || acc.id;
+        dueInterestDates(acc, today).forEach(ds=>{
+          const exists = transactions.some(t=>t.autoInterest && t.accountId===targetAccountId && t.date===ds && t.note===(acc.name+" 利息"));
+          if(!exists){
+            const ref = doc(collection(db,"transactions"));
+            batch.set(ref, {
+              type:"income", amount:Math.round(monthly), categoryId:interestCatId,
+              accountId:targetAccountId,
+              date:ds, note:acc.name+" 利息", autoInterest:true, createdAt:Date.now(),
+            });
+            any = true;
+          }
+        });
+      });
+      if(any) await batch.commit();
+    }finally{
+      generatingInterestRef.current = false;
+    }
+  }
+  useEffect(()=>{ generateDueInterest(); }, [accounts, transactions, categories]);
+
+  function flash(text){ setMsg(text); setTimeout(()=>setMsg(null), 1600); }
+
+  function prevMonth(){ setCursorMonth(d=>{const nd=new Date(d); nd.setMonth(nd.getMonth()-1); return nd;}); }
+  function nextMonth(){ setCursorMonth(d=>{const nd=new Date(d); nd.setMonth(nd.getMonth()+1); return nd;}); }
+  function jumpToMonth(y, m){ setCursorMonth(new Date(y, m-1, 1)); }
+
+  const monthTx = useMemo(()=>{
+    const key = monthKey(cursorMonth);
+    return transactions.filter(t=>t.date && t.date.slice(0,7)===key);
+  }, [transactions, cursorMonth]);
+
+  const rangeTx = useMemo(()=>{
+    if(homeRangeMode!=="custom") return monthTx;
+    if(homeRangeEnd < homeRangeStart) return [];
+    return transactions.filter(t=>t.date && t.date>=homeRangeStart && t.date<=homeRangeEnd);
+  }, [transactions, homeRangeMode, homeRangeStart, homeRangeEnd, monthTx]);
+
+  function openEditTx(t){
+    setEditingTx(t);
+    setAddKind(t.type==="transfer" ? "transfer" : "txn");
+    setShowAdd(true);
+  }
+  function openViewTx(t){
+    setViewingTx(t);
+  }
+  function closeAddModals(){
+    setShowAdd(false); setEditingTx(null); setPresetDate(null); setPresetType(null); setAddKind("txn");
+  }
+  async function saveTx(data){
+    try{
+      if(editingTx) await updateDoc(doc(db,"transactions",editingTx.id), data);
+      else await addDoc(collection(db,"transactions"), {...data, createdAt:Date.now()});
+      closeAddModals();
+      flash("已儲存");
+    }catch(e){ alert("儲存失敗："+e.message); }
+  }
+  async function deleteTx(id){
+    if(!confirm("確定刪除這筆交易？")) return;
+    await deleteDoc(doc(db,"transactions",id));
+    closeAddModals();
+    flash("已刪除");
+  }
+  async function addCategory(data){
+    const siblings = categories.filter(c=>c.type===data.type && (c.parentId||null)===(data.parentId||null));
+    const maxOrder = siblings.reduce((m,c)=>Math.max(m, c.order||0), -1);
+    await addDoc(collection(db,"categories"), {...data, order:maxOrder+1});
+  }
+  async function reorderCategoryGroup(newList){
+    const batch = writeBatch(db);
+    newList.forEach((c,i)=>{ batch.update(doc(db,"categories",c.id), {order:i}); });
+    await batch.commit();
+  }
+  async function editCategory(id, data){ await updateDoc(doc(db,"categories",id), data); }
+  async function deleteCategory(id){
+    await deleteDoc(doc(db,"categories",id));
+    const b = budgets.find(b=>b.categoryId===id);
+    if(b) await deleteDoc(doc(db,"budgets",b.id));
+  }
+  async function setBudget(categoryId, limit){
+    const existing = budgets.find(b=>b.categoryId===categoryId);
+    if(limit===null){
+      if(existing) await deleteDoc(doc(db,"budgets",existing.id));
+      return;
+    }
+    if(existing) await updateDoc(doc(db,"budgets",existing.id), {monthlyLimit:limit});
+    else await addDoc(collection(db,"budgets"), {categoryId, monthlyLimit:limit});
+  }
+
+  async function addAccount(data){
+    const sameType = accounts.filter(a=>a.type===data.type);
+    const maxOrder = sameType.reduce((m,a)=>Math.max(m, a.order||0), -1);
+    await addDoc(collection(db,"accounts"), {...data, order:maxOrder+1});
+  }
+  async function editAccount(id, data){ await updateDoc(doc(db,"accounts",id), data); }
+  async function deleteAccount(id){ await deleteDoc(doc(db,"accounts",id)); }
+  async function reorderAccountGroup(newList){
+    const batch = writeBatch(db);
+    newList.forEach((acc, i)=>{ batch.update(doc(db,"accounts",acc.id), {order:i}); });
+    await batch.commit();
+  }
+
+  async function addInvestment(data){ await addDoc(collection(db,"investments"), data); }
+  async function editInvestment(id, data){ await updateDoc(doc(db,"investments",id), data); }
+  async function deleteInvestment(id){ await deleteDoc(doc(db,"investments",id)); }
+
+  const showMonthSwitcher = tab==="home" && (homeMode==="calendar" || homeRangeMode==="month");
+  const showDateRangeRow = tab==="home" && homeMode==="list" && homeRangeMode==="custom";
+
+  return (
+    <div className="app">
+      <div className="header">
+        <h1>我的資產</h1>
+        <button className="theme-toggle" onClick={()=>setDarkMode(d=>!d)}>{darkMode?"☀️":"🌙"}</button>
+      </div>
+      {tab==="home" && homeMode==="list" &&
+        <div className="range-mode-row">
+          <button className="range-mode-link" onClick={()=>setHomeRangeMode(m=>m==="month"?"custom":"month")}>
+            {homeRangeMode==="month" ? "改用自訂區間" : "改用選月份"}
+          </button>
+        </div>
+      }
+      {showMonthSwitcher &&
+        <MonthSwitcher date={cursorMonth} onPrev={prevMonth} onNext={nextMonth} onJump={()=>setShowMonthPicker(true)} />
+      }
+      {showDateRangeRow &&
+        <div className="date-range-row">
+          <input type="date" value={homeRangeStart} onChange={e=>setHomeRangeStart(e.target.value)} />
+          <span>～</span>
+          <input type="date" value={homeRangeEnd} onChange={e=>setHomeRangeEnd(e.target.value)} />
+        </div>
+      }
+
+      <div className="content">
+        {tab==="home" &&
+          <React.Fragment>
+            <div className="mode-toggle">
+              <button className={homeMode==="list"?"active":""} onClick={()=>setHomeMode("list")}>收支清冊</button>
+              <button className={homeMode==="calendar"?"active":""} onClick={()=>setHomeMode("calendar")}>日曆</button>
+            </div>
+            {homeMode==="list" ?
+              <OverviewTab categories={categories} accounts={accounts} monthTx={rangeTx} allTx={transactions}
+                periodLabel={homeRangeMode==="custom"?"區間":"本月"}
+                onViewTx={openViewTx} />
+              :
+              <CalendarTab categories={categories} accounts={accounts} monthTx={monthTx} cursorMonth={cursorMonth}
+                onAddOnDate={(ds)=>{setPresetDate(ds); setPresetType(null); setEditingTx(null); setAddKind("txn"); setShowAdd(true);}}
+                onViewTx={openViewTx} />
+            }
+          </React.Fragment>
+        }
+        {tab==="analysis" &&
+          <AnalysisTab categories={categories} transactions={transactions} />
+        }
+        {tab==="settings" &&
+          <SettingsTab categories={categories} accounts={accounts} transactions={transactions} investments={investments} onViewTx={openViewTx}
+            onAddCategory={addCategory} onEditCategory={editCategory} onDeleteCategory={deleteCategory}
+            onReorderCategoryGroup={reorderCategoryGroup}
+            onAddAccount={addAccount} onEditAccount={editAccount} onDeleteAccount={deleteAccount}
+            onReorderGroup={reorderAccountGroup}
+            onAddInvestment={addInvestment} onEditInvestment={editInvestment} onDeleteInvestment={deleteInvestment} />
+        }
+      </div>
+
+      {tab==="home" &&
+        <button className="fab" onClick={()=>{
+          setEditingTx(null); setPresetDate(null); setPresetType(null); setShowActionMenu(true);
+        }}>＋</button>
+      }
+
+      <BottomNav tab={tab} setTab={setTab} />
+
+      {showMonthPicker &&
+        <MonthPickerSheet year={cursorMonth.getFullYear()} month={cursorMonth.getMonth()+1}
+          onPick={jumpToMonth}
+          onClose={()=>setShowMonthPicker(false)} />
+      }
+
+      {viewingTx &&
+        <TxDetailSheet t={viewingTx} categories={categories} accounts={accounts}
+          onClose={()=>setViewingTx(null)}
+          onEdit={()=>{ const t=viewingTx; setViewingTx(null); openEditTx(t); }} />
+      }
+      {showActionMenu &&
+        <AddActionSheet
+          onClose={()=>setShowActionMenu(false)}
+          onPick={(kind)=>{
+            setShowActionMenu(false);
+            setEditingTx(null);
+            if(kind==="transfer"){ setAddKind("transfer"); }
+            else { setAddKind("txn"); setPresetType(kind); }
+            setShowAdd(true);
+          }} />
+      }
+      {showAdd && addKind==="txn" &&
+        <AddTxModal categories={categories} accounts={accounts}
+          initial={editingTx ? editingTx : ((presetDate||presetType) ? {date:presetDate, type:presetType} : null)}
+          onSave={saveTx} onDelete={deleteTx}
+          onClose={closeAddModals} />
+      }
+      {showAdd && addKind==="transfer" &&
+        <TransferModal accounts={accounts}
+          initial={editingTx}
+          onSave={saveTx} onDelete={deleteTx}
+          onClose={closeAddModals} />
+      }
+      {msg && <div className="top-msg">{msg}</div>}
+    </div>
+  );
+}
+
+createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
