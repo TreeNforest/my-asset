@@ -1,0 +1,20 @@
+{
+  "name": "林間帳本 Grove",
+  "short_name": "Grove",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#EDF0ED",
+  "theme_color": "#EDF0ED",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
