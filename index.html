@@ -1,0 +1,1726 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>蓋印紀念冊</title>
+
+<!-- ============================================================
+  字體說明:
+  目前使用 Google Fonts 的「思源宋體」「霞鶴文楷」作為替代字體,
+  方便你立即預覽效果。正式部署時,請依照你其他專案的做法,
+  把下方 @font-face 換成你自己的字體檔案路徑,例如:
+    @font-face { font-family: 'rixingsong'; src: url('./fonts/rixingsong-1.0-semibold.otf'); }
+    @font-face { font-family: 'creamfont'; src: url('./fonts/creamfont-3.3.otf'); }
+  並把 CSS 變數 --font-display / --font-body 改成對應的 font-family 名稱即可。
+============================================================ -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;600;700&family=LXGW+WenKai+TC:wght@400;500&display=swap" rel="stylesheet">
+
+<!-- Leaflet for OpenStreetMap -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  :root {
+    --bg: #F2EFE9;
+    --ink: #3D3833;
+    --ink-soft: #6B645C;
+    --steel: #8A99A8;
+    --steel-soft: #AEBAC4;
+    --vermil: #B7705A;
+    --vermil-soft: #D8B3A4;
+    --khaki: #D9D2C3;
+    --paper: #FAF8F4;
+
+    --font-display: 'Noto Serif TC', serif;
+    --font-body: 'LXGW WenKai TC', serif;
+
+    --radius: 4px;
+    --shadow-card: 0 1px 2px rgba(61,56,51,0.06), 0 4px 14px rgba(61,56,51,0.05);
+  }
+
+  /* 深色模式:延續同樣的 Morandi 氣質,只是底色換成深墨調,
+     並微調煙燻藍灰/赭石紅的亮度,讓它們在深底上仍維持清晰可讀。 */
+  [data-theme="dark"] {
+    --bg: #2A2724;
+    --ink: #EBE6DD;
+    --ink-soft: #A39C92;
+    --steel: #9FACB8;
+    --steel-soft: #6B7682;
+    --vermil: #CC8669;
+    --vermil-soft: #5A4038;
+    --khaki: #45403A;
+    --paper: #34302B;
+
+    --shadow-card: 0 1px 2px rgba(0,0,0,0.3), 0 4px 14px rgba(0,0,0,0.25);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  #root { min-height: 100vh; }
+
+  .app-shell { max-width: 1080px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  .app-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 24px; padding-bottom: 18px;
+    border-bottom: 1px solid var(--khaki);
+  }
+
+  .app-title {
+    font-family: var(--font-display); font-weight: 700; font-size: 26px;
+    letter-spacing: 0.06em; color: var(--ink); display: flex; align-items: center; gap: 10px;
+  }
+
+  .app-title .seal-mark {
+    width: 30px; height: 30px; border: 2px solid var(--vermil); border-radius: 3px;
+    display: flex; align-items: center; justify-content: center; color: var(--vermil);
+    font-size: 15px; font-weight: 700; transform: rotate(-3deg); flex-shrink: 0;
+  }
+
+  .app-subtitle { font-size: 12.5px; color: var(--ink-soft); letter-spacing: 0.04em; margin-top: 4px; }
+  .header-actions { display: flex; gap: 8px; }
+  .theme-toggle-btn {
+    width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--khaki);
+    background: var(--paper); color: var(--ink-soft); cursor: pointer; font-size: 15px;
+    display: flex; align-items: center; justify-content: center; transition: all 0.15s ease;
+  }
+  .theme-toggle-btn:hover { border-color: var(--steel); color: var(--ink); }
+
+  .nav-tabs { display: flex; gap: 6px; margin-bottom: 18px; flex-wrap: wrap; }
+  .nav-tab {
+    font-family: var(--font-display); font-size: 14px; letter-spacing: 0.03em;
+    padding: 8px 18px; background: transparent; border: 1px solid var(--khaki);
+    border-radius: var(--radius); color: var(--ink-soft); cursor: pointer; transition: all 0.15s ease;
+  }
+  .nav-tab:hover { border-color: var(--steel); color: var(--ink); }
+  .nav-tab.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
+  .sub-tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+  .sub-tab {
+    font-size: 12.5px; padding: 6px 14px; border-radius: 14px; border: 1px solid var(--khaki);
+    background: transparent; color: var(--ink-soft); cursor: pointer; transition: all 0.15s ease;
+  }
+  .sub-tab:hover { border-color: var(--steel); color: var(--ink); }
+  .sub-tab.active { background: var(--steel); border-color: var(--steel); color: #fff; }
+
+  .sub-tabs-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  .layout-toggle { display: flex; gap: 4px; }
+  .layout-toggle-btn {
+    width: 32px; height: 32px; border-radius: var(--radius); border: 1px solid var(--khaki);
+    background: var(--paper); color: var(--ink-soft); cursor: pointer; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; transition: all 0.15s ease;
+  }
+  .layout-toggle-btn:hover { border-color: var(--steel); color: var(--ink); }
+  .layout-toggle-btn.active { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
+  .stamp-compact-list { display: flex; flex-direction: column; gap: 10px; }
+  .stamp-compact-row {
+    background: var(--paper); border: 1px solid var(--khaki); border-radius: var(--radius);
+    box-shadow: var(--shadow-card); padding: 10px 14px; display: flex; gap: 12px; align-items: center; cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+  .stamp-compact-row:hover { transform: translateX(2px); }
+  .stamp-compact-thumb {
+    width: 44px; height: 44px; border-radius: var(--radius); flex-shrink: 0; overflow: hidden;
+    background: linear-gradient(135deg, var(--khaki), var(--steel-soft));
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 700; font-size: 16px; color: var(--paper);
+  }
+  .stamp-compact-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .stamp-compact-body { flex: 1; min-width: 0; }
+  .stamp-compact-title { font-family: var(--font-display); font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stamp-compact-meta { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .calendar-box {
+    background: var(--paper); border: 1px solid var(--khaki); border-radius: 6px; padding: 18px 14px;
+  }
+  .calendar-nav { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 16px; }
+  .calendar-nav-btn {
+    background: none; border: none; cursor: pointer; color: var(--ink-soft); font-size: 18px; padding: 4px 10px;
+  }
+  .calendar-nav-btn:hover { color: var(--vermil); }
+  .calendar-month-label { font-family: var(--font-display); font-weight: 600; font-size: 16px; min-width: 110px; text-align: center; }
+
+  .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .calendar-weekday { text-align: center; font-size: 11.5px; color: var(--ink-soft); padding-bottom: 8px; }
+  .calendar-day-cell {
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+    border-radius: var(--radius); cursor: pointer; font-size: 14px; color: var(--ink);
+    transition: background 0.12s ease;
+  }
+  .calendar-day-cell:hover { background: var(--bg); }
+  .calendar-day-cell.empty { cursor: default; }
+  .calendar-day-cell.empty:hover { background: none; }
+  .calendar-day-cell.has-stamp { color: var(--vermil); font-weight: 700; }
+  .calendar-day-cell.is-today { background: var(--vermil); color: #fff; font-weight: 700; }
+  .calendar-day-cell.is-today:hover { background: var(--vermil); }
+  .calendar-day-cell.is-selected:not(.is-today) { border: 1.5px solid var(--vermil); }
+
+  .calendar-day-detail { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--khaki); }
+  .calendar-day-detail-title { font-family: var(--font-display); font-weight: 600; font-size: 14px; color: var(--vermil); margin-bottom: 10px; }
+  .calendar-day-detail-empty { font-size: 12.5px; color: var(--ink-soft); }
+
+  .btn {
+    font-family: var(--font-body); font-size: 13.5px; padding: 9px 18px;
+    border-radius: var(--radius); border: 1px solid var(--khaki); background: var(--paper);
+    color: var(--ink); cursor: pointer; transition: all 0.15s ease;
+  }
+  .btn:hover { border-color: var(--steel); }
+  .btn-primary { background: var(--vermil); border-color: var(--vermil); color: #fff; }
+  .btn-primary:hover { background: #A35F4B; border-color: #A35F4B; }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--ink-soft); }
+  .btn-ghost:hover { color: var(--vermil); }
+  .btn-sm { padding: 5px 12px; font-size: 12.5px; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+
+  .search-bar { position: relative; margin-bottom: 14px; }
+  .search-input {
+    width: 100%; font-family: var(--font-body); font-size: 14px; padding: 9px 14px 9px 36px;
+    border: 1px solid var(--khaki); border-radius: var(--radius); background: var(--paper);
+    color: var(--ink); transition: border-color 0.15s ease;
+  }
+  .search-input:focus { outline: none; border-color: var(--steel); }
+  .search-input::placeholder { color: var(--ink-soft); }
+  .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--ink-soft); font-size: 14px; pointer-events: none; }
+  .search-clear { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 14px; padding: 2px 4px; }
+  .search-clear:hover { color: var(--vermil); }
+
+  .filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .filter-chip {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;
+    padding: 6px 12px; border-radius: 14px; background: var(--steel); color: #fff; white-space: nowrap;
+  }
+  .filter-chip.medium { background: var(--vermil); }
+  .filter-chip button { background: none; border: none; color: rgba(255,255,255,0.85); cursor: pointer; font-size: 13px; line-height: 1; padding: 0; }
+  .filter-chip button:hover { color: #fff; }
+  .filter-add-btn {
+    font-size: 12.5px; padding: 6px 14px; border-radius: 14px; border: 1px dashed var(--khaki);
+    background: transparent; color: var(--ink-soft); cursor: pointer;
+  }
+  .filter-add-btn:hover { border-color: var(--steel); color: var(--ink); }
+  .filter-clear-btn { font-size: 12px; color: var(--vermil); background: none; border: none; cursor: pointer; padding: 4px 6px; }
+
+  .tree-picker-wrap { position: relative; }
+  .tree-picker-panel {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; width: 280px; max-height: 360px;
+    overflow-y: auto; background: var(--paper); border: 1px solid var(--khaki); border-radius: var(--radius);
+    box-shadow: 0 8px 28px rgba(61,56,51,0.16); padding: 10px;
+  }
+  .tree-node-row { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: var(--radius); font-size: 13px; cursor: pointer; }
+  .tree-node-row:hover { background: var(--bg); }
+  .tree-node-row.checked { color: var(--vermil); font-weight: 600; }
+  .tree-node-row input { accent-color: var(--vermil); cursor: pointer; }
+  .tree-node-label { flex: 1; }
+  .tree-node-empty { font-size: 12px; color: var(--ink-soft); padding: 10px 6px; }
+
+  .stamp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .stamp-card {
+    background: var(--paper); border: 1px solid var(--khaki); border-radius: var(--radius);
+    box-shadow: var(--shadow-card); overflow: hidden; cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease; display: flex; flex-direction: column;
+  }
+  .stamp-card:hover { transform: translateY(-2px); box-shadow: 0 4px 18px rgba(61,56,51,0.1); }
+  .stamp-photo { width: 100%; height: 140px; object-fit: cover; background: var(--khaki); display: block; }
+  .stamp-photo-placeholder {
+    width: 100%; height: 140px; background: linear-gradient(135deg, var(--khaki), var(--steel-soft));
+    display: flex; align-items: center; justify-content: center; color: var(--paper);
+    font-family: var(--font-display); font-size: 28px; font-weight: 700;
+  }
+  .stamp-card-body { padding: 12px 14px 14px; position: relative; }
+  .stamp-location { font-family: var(--font-display); font-weight: 600; font-size: 15px; margin: 0 0 4px; }
+  .stamp-venue { font-size: 11px; color: var(--ink-soft); margin-bottom: 4px; }
+  .stamp-date { font-size: 11.5px; color: var(--ink-soft); margin-bottom: 6px; }
+  .stamp-note-preview {
+    font-size: 12.5px; color: var(--ink-soft); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 6px;
+  }
+  .stamp-tag-row { display: flex; gap: 4px; flex-wrap: wrap; }
+  .stamp-tag-mini { font-size: 10.5px; padding: 1px 8px; border-radius: 8px; background: var(--bg); color: var(--ink-soft); border: 1px solid var(--khaki); }
+  .medium-tag-mini { font-size: 10.5px; padding: 1px 8px; border-radius: 8px; background: var(--vermil-soft); color: var(--ink); border: 1px solid var(--vermil-soft); }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--ink-soft); border: 1px dashed var(--khaki); border-radius: var(--radius); }
+  .empty-state-icon { font-size: 32px; margin-bottom: 10px; opacity: 0.5; }
+  .empty-state-text { font-size: 13.5px; }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(61,56,51,0.45); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 1000; }
+  .modal-box { background: var(--bg); border-radius: 6px; width: 100%; max-width: 560px; max-height: 88vh; overflow-y: auto; padding: 28px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+  .modal-title { font-family: var(--font-display); font-weight: 700; font-size: 19px; margin: 0 0 20px; }
+  .field-group { margin-bottom: 16px; }
+  .field-label { display: block; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 5px; letter-spacing: 0.02em; }
+  .field-input, .field-textarea, .field-select {
+    width: 100%; font-family: var(--font-body); font-size: 14px; padding: 9px 12px;
+    border: 1px solid var(--khaki); border-radius: var(--radius); background: var(--paper); color: var(--ink);
+  }
+  .field-input:focus, .field-textarea:focus, .field-select:focus { outline: none; border-color: var(--steel); }
+  .field-textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
+
+  .geocode-status { font-size: 11.5px; margin-top: 5px; color: var(--ink-soft); }
+  .geocode-status.ok { color: #6F8A6B; }
+  .geocode-status.err { color: var(--vermil); }
+  .manual-coord-toggle { font-size: 11.5px; color: var(--steel); background: none; border: none; cursor: pointer; padding: 0; margin-top: 5px; text-decoration: underline; }
+  .manual-coord-toggle:hover { color: var(--vermil); }
+  .manual-coord-row { display: flex; gap: 8px; margin-top: 8px; }
+  .manual-coord-row .field-input { font-size: 13px; }
+  .field-hint { font-size: 11px; color: var(--ink-soft); margin-top: 6px; }
+
+  .photo-upload-zone { border: 1px dashed var(--khaki); border-radius: var(--radius); padding: 14px; text-align: center; cursor: pointer; font-size: 12.5px; color: var(--ink-soft); background: var(--paper); }
+  .photo-upload-zone:hover { border-color: var(--steel); }
+  .photo-preview-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .photo-preview-thumb { position: relative; width: 64px; height: 64px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--khaki); }
+  .photo-preview-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-preview-remove { position: absolute; top: 2px; right: 2px; background: rgba(61,56,51,0.7); color: #fff; border: none; border-radius: 50%; width: 18px; height: 18px; font-size: 11px; line-height: 1; cursor: pointer; }
+
+  .selected-tags-box { display: flex; gap: 6px; flex-wrap: wrap; min-height: 32px; border: 1px solid var(--khaki); border-radius: var(--radius); padding: 6px 8px; background: var(--paper); }
+  .selected-tag-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 9px; border-radius: 12px; background: var(--vermil-soft); color: var(--ink); }
+  .selected-tag-pill.medium { background: var(--steel-soft); }
+  .selected-tag-pill button { background: none; border: none; cursor: pointer; color: var(--ink); font-size: 12px; padding: 0; }
+  .selected-tags-empty { font-size: 12px; color: var(--ink-soft); padding: 4px; }
+
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--khaki); }
+
+  .detail-photo-strip { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 16px; }
+  .detail-photo-strip img { height: 200px; width: auto; border-radius: var(--radius); flex-shrink: 0; }
+  .detail-meta-line { font-size: 13px; color: var(--ink-soft); margin-bottom: 4px; }
+  .detail-note { font-size: 14px; line-height: 1.8; margin-top: 14px; white-space: pre-wrap; }
+  .detail-tags-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+
+  .category-tree-list { margin-bottom: 14px; }
+  .category-node-row { display: flex; align-items: center; gap: 0; border-radius: var(--radius); }
+  .category-node-row:hover { background: var(--paper); }
+
+  /* 樹狀連接線:每一層佔 22px 寬,放兩個獨立的線段——
+     貫穿整行高度的垂直線(該層祖先若還有後續兄弟節點時顯示),
+     和只到節點文字中心高度的轉角線(僅自己這一層顯示)。 */
+  .tree-lines { display: flex; flex-shrink: 0; align-self: stretch; }
+  .tree-line-col { width: 22px; position: relative; flex-shrink: 0; }
+  .tree-vline { position: absolute; left: 10px; top: 0; bottom: 0; width: 1px; background: var(--khaki); }
+  .tree-vline.half-up { bottom: 50%; }
+  .tree-hline { position: absolute; left: 10px; top: 50%; width: 12px; height: 1px; background: var(--khaki); }
+  .category-node-content { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: 1; padding: 7px 8px 7px 0; min-width: 0; }
+  .category-node-left { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+  .category-node-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+  .category-node-row:hover .category-node-actions { opacity: 1; }
+  .icon-btn { background: none; border: none; cursor: pointer; color: var(--ink-soft); font-size: 13px; padding: 3px 6px; border-radius: 3px; }
+  .icon-btn:hover { color: var(--vermil); background: var(--bg); }
+
+  .add-category-row { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--khaki); }
+  .add-category-row .field-input { flex: 1; }
+
+  .medium-tag-list { margin-bottom: 14px; }
+  .medium-tag-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 8px; border-radius: var(--radius); }
+  .medium-tag-row:hover { background: var(--paper); }
+  .medium-tag-row-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+  .medium-tag-row:hover .medium-tag-row-actions { opacity: 1; }
+
+  .map-container { height: 560px; border-radius: var(--radius); border: 1px solid var(--khaki); overflow: hidden; position: relative; z-index: 1; }
+  .leaflet-popup-content-wrapper { border-radius: var(--radius); font-family: var(--font-body); }
+  /* Leaflet 預設會把控制元件/動畫面板的 z-index 設到 400~1000,
+     這裡明確收斂在 .map-container 範圍內,避免蓋住其上層的 modal。 */
+  .map-container .leaflet-pane,
+  .map-container .leaflet-top,
+  .map-container .leaflet-bottom,
+  .map-container .leaflet-control { z-index: 5 !important; }
+  .map-popup-title { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; margin-bottom: 2px; }
+  .map-popup-date { font-size: 11px; color: var(--ink-soft); }
+  .map-popup-clickable { cursor: pointer; }
+  .map-popup-clickable:hover .map-popup-title { color: var(--vermil); }
+
+  .map-cluster-badge {
+    width: 30px; height: 30px; border-radius: 50%; background: var(--vermil);
+    color: #fff; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 700; font-size: 13px;
+  }
+  .map-popup-list-title { font-family: var(--font-display); font-weight: 600; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 6px; }
+  .map-popup-list-item {
+    padding: 6px 4px; border-top: 1px solid var(--khaki); cursor: pointer; font-size: 13px;
+  }
+  .map-popup-list-item:first-of-type { border-top: none; }
+  .map-popup-list-item:hover { color: var(--vermil); }
+  .map-popup-list-item .map-popup-date { display: block; }
+
+  .fab {
+    position: fixed; bottom: 28px; right: 28px; width: 54px; height: 54px; border-radius: 50%;
+    background: var(--vermil); color: #fff; border: none; font-size: 26px;
+    box-shadow: 0 4px 16px rgba(183,112,90,0.4); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; z-index: 50;
+  }
+  .fab:hover { background: #A35F4B; }
+
+  .loading-text { text-align: center; padding: 40px; color: var(--ink-soft); font-size: 13px; }
+
+  /* ===== Wishlist (待蓋清單) ===== */
+  .wishlist-list { display: flex; flex-direction: column; gap: 12px; }
+  .wishlist-card {
+    background: var(--paper); border: 1px solid var(--khaki); border-radius: var(--radius);
+    box-shadow: var(--shadow-card); padding: 14px 16px; display: flex; gap: 14px; align-items: flex-start;
+  }
+  .wishlist-card.due-soon { border-color: var(--vermil-soft); }
+  .wishlist-icon {
+    width: 44px; height: 44px; border-radius: var(--radius); flex-shrink: 0;
+    background: linear-gradient(135deg, var(--khaki), var(--steel-soft));
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-display); font-weight: 700; font-size: 18px; color: var(--paper);
+    overflow: hidden;
+  }
+  .wishlist-icon img { width: 100%; height: 100%; object-fit: cover; }
+  .wishlist-body { flex: 1; min-width: 0; }
+  .wishlist-top-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .wishlist-name {
+    font-family: var(--font-display); font-weight: 600; font-size: 15px; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .wishlist-venue { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+  .wishlist-meta-line { font-size: 11.5px; color: var(--ink-soft); margin-top: 3px; }
+  .wishlist-deadline { font-size: 11.5px; color: var(--ink-soft); flex-shrink: 0; white-space: nowrap; text-align: right; margin-top: 1px; }
+  .wishlist-deadline.due-soon { color: var(--vermil); font-weight: 600; }
+  .wishlist-note { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; margin-top: 6px; }
+  .wishlist-source-link {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--steel);
+    margin-top: 6px; text-decoration: none; word-break: break-all;
+  }
+  .wishlist-source-link:hover { color: var(--vermil); text-decoration: underline; }
+  .wishlist-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .wishlist-tag-row { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+
+  @media (max-width: 600px) {
+    .app-shell { padding: 20px 14px 80px; }
+    .stamp-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .map-container { height: 420px; }
+    .tree-picker-panel { width: 240px; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client"
+  }
+}
+</script>
+
+<script type="module">
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createRoot } from 'react-dom/client';
+// 注意:Firebase 改用官方 gstatic CDN 直接載入,而非 esm.sh 的子模組路徑(如 'firebase/app')。
+// esm.sh 在拆分解析 firebase/app 與 firebase/firestore 兩個子模組時,
+// 偶爾會解析到版本不對齊的內部依賴,導致 getFirestore 找不到已註冊的服務
+// (Error: Service firestore is not available)。gstatic CDN 是 Firebase 官方
+// 建議的標準 Web 載入方式,版本一致性有保證,不會有這個問題。
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import {
+  getFirestore, collection, doc, addDoc, updateDoc, deleteDoc,
+  onSnapshot, query, orderBy, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+const e = React.createElement;
+
+/* ============================================================
+   Firebase config — 已連接 stamp-journal-7b9cb 專案
+============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyC7Puixgy8pd-YeF7HhAZQPtKRusk9wwhY",
+  authDomain: "stamp-journal-7b9cb.firebaseapp.com",
+  projectId: "stamp-journal-7b9cb",
+  storageBucket: "stamp-journal-7b9cb.firebasestorage.app",
+  messagingSenderId: "207752007024",
+  appId: "1:207752007024:web:9bbd64031f90830cbcd3b5"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+function compressImage(file, maxSize = 900, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxSize) {
+          height = Math.round(height * (maxSize / width));
+          width = maxSize;
+        } else if (height > maxSize) {
+          width = Math.round(width * (maxSize / height));
+          height = maxSize;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = evt.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function geocodeLocation(q) {
+  if (!q || q.trim().length < 2) return null;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'zh-TW' } });
+    const data = await res.json();
+    if (data && data.length > 0) {
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), displayName: data[0].display_name };
+    }
+    return null;
+  } catch (err) {
+    console.error('Geocoding failed', err);
+    return null;
+  }
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  try {
+    const date = typeof d === 'string' ? new Date(d) : d;
+    return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+  } catch { return d; }
+}
+
+// 印章名稱選填,空白時以地點名當標題顯示(向下相容舊資料)
+function displayName(stamp) {
+  return (stamp.stampName && stamp.stampName.trim()) || stamp.location || '';
+}
+
+// 期限是否在 7 天內(含已過期),用於待蓋清單的視覺提醒
+function isDueSoon(deadline) {
+  if (!deadline) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(deadline);
+  const diffDays = (due - today) / (1000 * 60 * 60 * 24);
+  return diffDays <= 7;
+}
+
+// 使用者可能只貼 "example.com" 而沒打協定,這裡自動補上 https://
+// 讓連結能正確開啟,而不是被瀏覽器當成相對路徑解析。
+function normalizeUrl(url) {
+  const trimmed = (url || '').trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
+// 把座標相近(同一地點,容差約 10 公尺內)的章歸成一組,
+// 用於地圖上同地點多筆紀錄時顯示數字徽章而非疊在一起。
+function groupByCoordinate(located, precision = 4) {
+  const groups = {};
+  located.forEach((s) => {
+    const key = `${s.lat.toFixed(precision)},${s.lng.toFixed(precision)}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(s);
+  });
+  return Object.values(groups);
+}
+
+function toDateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// 產生某年某月的日曆格子陣列,週日為一週的開頭,前後補空格對齊。
+function buildCalendarCells(year, month) {
+  const firstDay = new Date(year, month, 1);
+  const startWeekday = firstDay.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+  return cells;
+}
+
+// 把蓋章紀錄依日期(YYYY-MM-DD)分組,用於日曆標示與當日清單。
+function groupStampsByDate(stamps) {
+  const map = {};
+  stamps.forEach((s) => {
+    if (!s.date) return;
+    if (!map[s.date]) map[s.date] = [];
+    map[s.date].push(s);
+  });
+  return map;
+}
+
+function buildTree(categories) {
+  const byParent = {};
+  categories.forEach((c) => {
+    const p = c.parentId || null;
+    if (!byParent[p]) byParent[p] = [];
+    byParent[p].push(c);
+  });
+  Object.values(byParent).forEach((arr) => arr.sort((a, b) => (a.order || 0) - (b.order || 0)));
+  function attach(parentId) {
+    return (byParent[parentId] || []).map((node) => ({ ...node, children: attach(node.id) }));
+  }
+  return attach(null);
+}
+
+function flattenTreeWithDepth(tree, depth = 0) {
+  let out = [];
+  tree.forEach((node) => {
+    out.push({ ...node, depth });
+    out = out.concat(flattenTreeWithDepth(node.children, depth + 1));
+  });
+  return out;
+}
+
+// 跟 flattenTreeWithDepth 類似,但額外記錄每一層祖先「是否是同層最後一個節點」,
+// 用於畫樹狀連接線:若某層祖先不是最後一個,該層的垂直線要延伸到下一個兄弟節點,
+// 反之則該層垂直線在此處應該斷開。
+function flattenTreeWithLines(tree, depth = 0, ancestorsIsLast = []) {
+  let out = [];
+  tree.forEach((node, idx) => {
+    const isLast = idx === tree.length - 1;
+    out.push({ ...node, depth, isLast, ancestorsIsLast: [...ancestorsIsLast] });
+    out = out.concat(flattenTreeWithLines(node.children, depth + 1, [...ancestorsIsLast, isLast]));
+  });
+  return out;
+}
+
+function getDescendantIds(categories, rootId) {
+  const result = new Set([rootId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    categories.forEach((c) => {
+      if (c.parentId && result.has(c.parentId) && !result.has(c.id)) {
+        result.add(c.id);
+        changed = true;
+      }
+    });
+  }
+  return result;
+}
+
+function TreePicker({ categories, selectedIds, onToggle, onClose }) {
+  const tree = useMemo(() => buildTree(categories), [categories]);
+  const flat = useMemo(() => flattenTreeWithDepth(tree), [tree]);
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    function handleClick(ev) {
+      if (panelRef.current && !panelRef.current.contains(ev.target)) onClose();
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [onClose]);
+
+  return e('div', { className: 'tree-picker-panel', ref: panelRef },
+    flat.length === 0
+      ? e('div', { className: 'tree-node-empty' }, '還沒有任何分類，先到「管理分類」建立')
+      : flat.map((node) => e('label', {
+          key: node.id,
+          className: 'tree-node-row' + (selectedIds.includes(node.id) ? ' checked' : ''),
+          style: { paddingLeft: 6 + node.depth * 16 }
+        },
+          e('input', { type: 'checkbox', checked: selectedIds.includes(node.id), onChange: () => onToggle(node.id) }),
+          e('span', { className: 'tree-node-label' }, node.name)
+        ))
+  );
+}
+
+function MediumTagPicker({ mediumTags, selectedIds, onToggle, onClose }) {
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    function handleClick(ev) {
+      if (panelRef.current && !panelRef.current.contains(ev.target)) onClose();
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [onClose]);
+
+  return e('div', { className: 'tree-picker-panel', ref: panelRef },
+    mediumTags.length === 0
+      ? e('div', { className: 'tree-node-empty' }, '還沒有任何形式標籤，先到「管理形式標籤」建立')
+      : mediumTags.map((tag) => e('label', {
+          key: tag.id,
+          className: 'tree-node-row' + (selectedIds.includes(tag.id) ? ' checked' : '')
+        },
+          e('input', { type: 'checkbox', checked: selectedIds.includes(tag.id), onChange: () => onToggle(tag.id) }),
+          e('span', { className: 'tree-node-label' }, tag.name)
+        ))
+  );
+}
+
+function FilterBar({ categories, selectedFilterIds, setSelectedFilterIds, mediumTags, selectedMediumFilterIds, setSelectedMediumFilterIds }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [mediumPickerOpen, setMediumPickerOpen] = useState(false);
+  const toggleFilter = (id) => {
+    setSelectedFilterIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+  const toggleMediumFilter = (id) => {
+    setSelectedMediumFilterIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+  const catName = (id) => categories.find((c) => c.id === id)?.name || '';
+  const mediumName = (id) => mediumTags.find((t) => t.id === id)?.name || '';
+  const hasAnyFilter = selectedFilterIds.length > 0 || selectedMediumFilterIds.length > 0;
+
+  return e('div', { className: 'filter-bar' },
+    selectedFilterIds.map((id) => e('span', { key: 'cat-' + id, className: 'filter-chip' },
+      catName(id), e('button', { onClick: () => toggleFilter(id) }, '×')
+    )),
+    selectedMediumFilterIds.map((id) => e('span', { key: 'med-' + id, className: 'filter-chip medium' },
+      mediumName(id), e('button', { onClick: () => toggleMediumFilter(id) }, '×')
+    )),
+    e('div', { className: 'tree-picker-wrap' },
+      e('button', { className: 'filter-add-btn', onClick: () => setPickerOpen((v) => !v) }, '+ 篩選分類'),
+      pickerOpen && e(TreePicker, { categories, selectedIds: selectedFilterIds, onToggle: toggleFilter, onClose: () => setPickerOpen(false) })
+    ),
+    e('div', { className: 'tree-picker-wrap' },
+      e('button', { className: 'filter-add-btn', onClick: () => setMediumPickerOpen((v) => !v) }, '+ 篩選形式'),
+      mediumPickerOpen && e(MediumTagPicker, { mediumTags, selectedIds: selectedMediumFilterIds, onToggle: toggleMediumFilter, onClose: () => setMediumPickerOpen(false) })
+    ),
+    hasAnyFilter && e('button', {
+      className: 'filter-clear-btn',
+      onClick: () => { setSelectedFilterIds([]); setSelectedMediumFilterIds([]); }
+    }, '清除篩選')
+  );
+}
+
+function CategoryManagerModal({ categories, onClose }) {
+  const tree = useMemo(() => buildTree(categories), [categories]);
+  const flat = useMemo(() => flattenTreeWithDepth(tree), [tree]);
+  const flatWithLines = useMemo(() => flattenTreeWithLines(tree), [tree]);
+
+  const [newName, setNewName] = useState('');
+  const [newParentId, setNewParentId] = useState('');
+  const [movingNodeId, setMovingNodeId] = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  const handleAdd = async () => {
+    if (!newName.trim()) return;
+    try {
+      await addDoc(collection(db, 'categories'), {
+        name: newName.trim(), parentId: newParentId || null, order: Date.now(), createdAt: serverTimestamp()
+      });
+      setNewName('');
+    } catch (err) {
+      console.error(err);
+      alert('新增分類失敗');
+    }
+  };
+
+  const handleRename = async (id) => {
+    if (!renameValue.trim()) { setRenamingId(null); return; }
+    try { await updateDoc(doc(db, 'categories', id), { name: renameValue.trim() }); }
+    catch (err) { console.error(err); }
+    setRenamingId(null);
+  };
+
+  const handleMove = async (id, newParentIdValue) => {
+    const descendants = getDescendantIds(categories, id);
+    if (newParentIdValue && descendants.has(newParentIdValue)) {
+      alert('不能移動到自己的子分類底下');
+      return;
+    }
+    try { await updateDoc(doc(db, 'categories', id), { parentId: newParentIdValue || null }); }
+    catch (err) { console.error(err); }
+    setMovingNodeId(null);
+  };
+
+  const handleDelete = async (node) => {
+    const hasChildren = categories.some((c) => c.parentId === node.id);
+    const msg = hasChildren
+      ? `「${node.name}」底下還有子分類，刪除後子分類會變成頂層分類。確定刪除嗎？`
+      : `確定刪除「${node.name}」嗎？`;
+    if (!confirm(msg)) return;
+    try {
+      await deleteDoc(doc(db, 'categories', node.id));
+      const children = categories.filter((c) => c.parentId === node.id);
+      for (const child of children) {
+        await updateDoc(doc(db, 'categories', child.id), { parentId: null });
+      }
+    } catch (err) {
+      console.error(err);
+      alert('刪除失敗');
+    }
+  };
+
+  return e('div', { className: 'modal-overlay', onClick: (ev) => { if (ev.target === ev.currentTarget) onClose(); } },
+    e('div', { className: 'modal-box' },
+      e('h3', { className: 'modal-title' }, '管理分類'),
+      e('div', { className: 'category-tree-list' },
+        flatWithLines.length === 0
+          ? e('div', { className: 'tree-node-empty' }, '還沒有分類，從下方開始建立第一個吧')
+          : flatWithLines.map((node) => e('div', { key: node.id, className: 'category-node-row' },
+              e('div', { className: 'tree-lines' },
+                // 每一層祖先佔一格:若該祖先不是同層最後一個節點,畫貫穿整行的垂直線
+                node.ancestorsIsLast.map((ancestorIsLast, i) =>
+                  e('div', { key: i, className: 'tree-line-col' },
+                    !ancestorIsLast && e('div', { className: 'tree-vline' })
+                  )
+                ),
+                // 自己這一層:畫轉角線(上半段垂直 + 一段橫線),若自己不是最後一個,垂直線延伸到底
+                node.depth > 0 && e('div', { className: 'tree-line-col' },
+                  e('div', { className: 'tree-vline half-up' }),
+                  !node.isLast && e('div', { className: 'tree-vline', style: { top: '50%' } }),
+                  e('div', { className: 'tree-hline' })
+                )
+              ),
+              e('div', { className: 'category-node-content' },
+                e('div', { className: 'category-node-left' },
+                  renamingId === node.id
+                    ? e('input', {
+                        className: 'field-input', style: { fontSize: 13, padding: '4px 8px' },
+                        value: renameValue, autoFocus: true,
+                        onChange: (ev) => setRenameValue(ev.target.value),
+                        onKeyDown: (ev) => { if (ev.key === 'Enter') handleRename(node.id); },
+                        onBlur: () => handleRename(node.id)
+                      })
+                    : e('span', null, node.name)
+                ),
+                movingNodeId === node.id
+                  ? e('select', {
+                      className: 'field-select', style: { width: 160, fontSize: 12.5, padding: '4px 6px' },
+                      defaultValue: node.parentId || '',
+                      onChange: (ev) => handleMove(node.id, ev.target.value)
+                    },
+                      e('option', { value: '' }, '（設為頂層）'),
+                      flat.filter((n) => n.id !== node.id).map((n) => e('option', { key: n.id, value: n.id }, '　'.repeat(n.depth) + n.name))
+                    )
+                  : e('div', { className: 'category-node-actions' },
+                      e('button', { className: 'icon-btn', onClick: () => { setRenamingId(node.id); setRenameValue(node.name); } }, '改名'),
+                      e('button', { className: 'icon-btn', onClick: () => setMovingNodeId(node.id) }, '移動'),
+                      e('button', { className: 'icon-btn', onClick: () => handleDelete(node) }, '刪除')
+                    )
+              )
+            ))
+      ),
+      e('div', { className: 'add-category-row' },
+        e('input', {
+          className: 'field-input', placeholder: '新分類名稱', value: newName,
+          onChange: (ev) => setNewName(ev.target.value),
+          onKeyDown: (ev) => { if (ev.key === 'Enter') handleAdd(); }
+        }),
+        e('select', {
+          className: 'field-select', style: { maxWidth: 160 }, value: newParentId,
+          onChange: (ev) => setNewParentId(ev.target.value)
+        },
+          e('option', { value: '' }, '頂層分類'),
+          flat.map((n) => e('option', { key: n.id, value: n.id }, '　'.repeat(n.depth) + n.name))
+        ),
+        e('button', { className: 'btn btn-primary btn-sm', onClick: handleAdd }, '新增')
+      ),
+      e('div', { className: 'modal-actions' },
+        e('button', { className: 'btn btn-primary', onClick: onClose }, '完成')
+      )
+    )
+  );
+}
+
+function MediumTagManagerModal({ mediumTags, onMediumTagsChange, onClose }) {
+  const [newName, setNewName] = useState('');
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  const handleAdd = async () => {
+    if (!newName.trim()) return;
+    try {
+      const docRef = await addDoc(collection(db, 'mediumTags'), {
+        name: newName.trim(), createdAt: serverTimestamp()
+      });
+      onMediumTagsChange([...mediumTags, { id: docRef.id, name: newName.trim() }]);
+      setNewName('');
+    } catch (err) {
+      console.error(err);
+      alert('新增形式標籤失敗');
+    }
+  };
+
+  const handleRename = async (id) => {
+    if (!renameValue.trim()) { setRenamingId(null); return; }
+    try { await updateDoc(doc(db, 'mediumTags', id), { name: renameValue.trim() }); }
+    catch (err) { console.error(err); }
+    setRenamingId(null);
+  };
+
+  const handleDelete = async (tag) => {
+    if (!confirm(`確定刪除形式標籤「${tag.name}」嗎？已套用這個標籤的章不會被刪除，只會移除這個標籤。`)) return;
+    try { await deleteDoc(doc(db, 'mediumTags', tag.id)); }
+    catch (err) { console.error(err); alert('刪除失敗'); }
+  };
+
+  return e('div', { className: 'modal-overlay', onClick: (ev) => { if (ev.target === ev.currentTarget) onClose(); } },
+    e('div', { className: 'modal-box' },
+      e('h3', { className: 'modal-title' }, '管理形式標籤'),
+      e('div', { className: 'field-hint', style: { marginBottom: 14 } }, '例如：單色章、套色章、明信片、貼紙——用於描述蓋出來的東西是什麼形式，跟「分類」（地點/活動）是兩套獨立的標籤，可以同時套用。'),
+      e('div', { className: 'medium-tag-list' },
+        mediumTags.length === 0
+          ? e('div', { className: 'tree-node-empty' }, '還沒有形式標籤，從下方開始建立第一個吧')
+          : mediumTags.map((tag) => e('div', { key: tag.id, className: 'medium-tag-row' },
+              renamingId === tag.id
+                ? e('input', {
+                    className: 'field-input', style: { fontSize: 13, padding: '4px 8px' },
+                    value: renameValue, autoFocus: true,
+                    onChange: (ev) => setRenameValue(ev.target.value),
+                    onKeyDown: (ev) => { if (ev.key === 'Enter') handleRename(tag.id); },
+                    onBlur: () => handleRename(tag.id)
+                  })
+                : e('span', null, tag.name),
+              e('div', { className: 'medium-tag-row-actions' },
+                e('button', { className: 'icon-btn', onClick: () => { setRenamingId(tag.id); setRenameValue(tag.name); } }, '改名'),
+                e('button', { className: 'icon-btn', onClick: () => handleDelete(tag) }, '刪除')
+              )
+            ))
+      ),
+      e('div', { className: 'add-category-row' },
+        e('input', {
+          className: 'field-input', placeholder: '新形式標籤名稱', value: newName,
+          onChange: (ev) => setNewName(ev.target.value),
+          onKeyDown: (ev) => { if (ev.key === 'Enter') handleAdd(); }
+        }),
+        e('button', { className: 'btn btn-primary btn-sm', onClick: handleAdd }, '新增')
+      ),
+      e('div', { className: 'modal-actions' },
+        e('button', { className: 'btn btn-primary', onClick: onClose }, '完成')
+      )
+    )
+  );
+}
+
+function WishlistFormModal({ categories, editingItem, onClose, onSaved }) {
+  const isEdit = !!editingItem;
+  const [stampName, setStampName] = useState(editingItem?.stampName || '');
+  const [location, setLocation] = useState(editingItem?.location || '');
+  const [deadline, setDeadline] = useState(editingItem?.deadline || '');
+  const [note, setNote] = useState(editingItem?.note || '');
+  const [sourceUrl, setSourceUrl] = useState(editingItem?.sourceUrl || '');
+  const [photos, setPhotos] = useState(editingItem?.photos || []);
+  const [categoryIds, setCategoryIds] = useState(editingItem?.categoryIds || []);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handlePhotoSelect = async (evt) => {
+    const files = Array.from(evt.target.files || []);
+    for (const file of files) {
+      try {
+        const compressed = await compressImage(file);
+        setPhotos((prev) => [...prev, compressed]);
+      } catch (err) { console.error('Photo compression failed', err); }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removePhoto = (idx) => setPhotos((prev) => prev.filter((_, i) => i !== idx));
+
+  const toggleCategory = (id) => setCategoryIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  const removeCategoryTag = (id) => setCategoryIds((prev) => prev.filter((x) => x !== id));
+  const catName = (id) => categories.find((c) => c.id === id)?.name || '（已刪除的分類）';
+
+  const handleSave = async () => {
+    if (!stampName.trim() && !location.trim()) { alert('請至少輸入印章名稱或地點'); return; }
+    setSaving(true);
+    try {
+      const itemData = {
+        stampName: stampName.trim(),
+        location: location.trim(),
+        deadline: deadline || null,
+        note: note.trim(),
+        sourceUrl: normalizeUrl(sourceUrl),
+        photos,
+        categoryIds,
+        updatedAt: serverTimestamp()
+      };
+      if (isEdit) {
+        await updateDoc(doc(db, 'wishlist', editingItem.id), itemData);
+      } else {
+        itemData.createdAt = serverTimestamp();
+        await addDoc(collection(db, 'wishlist'), itemData);
+      }
+      onSaved();
+    } catch (err) {
+      console.error('Save failed', err);
+      alert('儲存失敗，請稍後再試');
+    } finally { setSaving(false); }
+  };
+
+  return e('div', { className: 'modal-overlay', onClick: (ev) => { if (ev.target === ev.currentTarget) onClose(); } },
+    e('div', { className: 'modal-box' },
+      e('h3', { className: 'modal-title' }, isEdit ? '編輯待蓋項目' : '新增待蓋項目'),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '印章名稱'),
+        e('input', {
+          className: 'field-input', placeholder: '例如：莫札特特展紀念章',
+          value: stampName, onChange: (ev) => setStampName(ev.target.value)
+        })
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '地點'),
+        e('input', {
+          className: 'field-input', placeholder: '例如：台北市立美術館',
+          value: location, onChange: (ev) => setLocation(ev.target.value)
+        })
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '期限 / 提醒日期（選填，例如展期結束日）'),
+        e('input', { type: 'date', className: 'field-input', value: deadline, onChange: (ev) => setDeadline(ev.target.value) })
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '分類標籤（選填）'),
+        e('div', { className: 'selected-tags-box' },
+          categoryIds.length === 0
+            ? e('span', { className: 'selected-tags-empty' }, '尚未選擇分類')
+            : categoryIds.map((id) => e('span', { key: id, className: 'selected-tag-pill' }, catName(id), e('button', { onClick: () => removeCategoryTag(id) }, '×')))
+        ),
+        e('div', { className: 'tree-picker-wrap', style: { marginTop: 8 } },
+          e('button', { className: 'filter-add-btn', onClick: () => setPickerOpen((v) => !v) }, '+ 選擇分類'),
+          pickerOpen && e(TreePicker, { categories, selectedIds: categoryIds, onToggle: toggleCategory, onClose: () => setPickerOpen(false) })
+        )
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '備註'),
+        e('textarea', {
+          className: 'field-textarea', placeholder: '為什麼想去蓋這個章……',
+          value: note, onChange: (ev) => setNote(ev.target.value)
+        })
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '資料來源網址（選填，例如展覽官網或售票頁）'),
+        e('input', {
+          className: 'field-input', type: 'url', placeholder: 'https://example.com/exhibition',
+          value: sourceUrl, onChange: (ev) => setSourceUrl(ev.target.value)
+        })
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '照片（選填，例如展覽宣傳圖或票根）'),
+        e('div', { className: 'photo-upload-zone', onClick: () => fileInputRef.current?.click() }, '點擊上傳照片（可多選，自動壓縮）'),
+        e('input', { ref: fileInputRef, type: 'file', accept: 'image/*', multiple: true, style: { display: 'none' }, onChange: handlePhotoSelect }),
+        photos.length > 0 && e('div', { className: 'photo-preview-row' },
+          photos.map((p, idx) => e('div', { key: idx, className: 'photo-preview-thumb' },
+            e('img', { src: p }), e('button', { className: 'photo-preview-remove', onClick: () => removePhoto(idx) }, '×')
+          ))
+        )
+      ),
+
+      e('div', { className: 'modal-actions' },
+        e('button', { className: 'btn btn-ghost', onClick: onClose }, '取消'),
+        e('button', { className: 'btn btn-primary', onClick: handleSave, disabled: saving }, saving ? '儲存中…' : '儲存')
+      )
+    )
+  );
+}
+
+function StampFormModal({ categories, mediumTags, editingStamp, prefill, onClose, onSaved }) {
+  const isEdit = !!editingStamp;
+  const initial = editingStamp || prefill || {};
+  const [stampName, setStampName] = useState(initial.stampName || '');
+  const [location, setLocation] = useState(initial.location || '');
+  const [date, setDate] = useState(initial.date || new Date().toISOString().slice(0, 10));
+  const [note, setNote] = useState(initial.note || '');
+  const [lat, setLat] = useState(initial.lat ?? null);
+  const [lng, setLng] = useState(initial.lng ?? null);
+  const [geoStatus, setGeoStatus] = useState(initial.lat ? { type: 'ok', msg: '已取得座標' } : null);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [photos, setPhotos] = useState(initial.photos || []);
+  const [categoryIds, setCategoryIds] = useState(initial.categoryIds || []);
+  const [mediumTagIds, setMediumTagIds] = useState(initial.mediumTagIds || []);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [mediumPickerOpen, setMediumPickerOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [showManualCoord, setShowManualCoord] = useState(false);
+  const [manualLat, setManualLat] = useState(initial.lat != null ? String(initial.lat) : '');
+  const [manualLng, setManualLng] = useState(initial.lng != null ? String(initial.lng) : '');
+  const fileInputRef = useRef(null);
+
+  const handleGeocode = async () => {
+    if (!location.trim()) return;
+    setGeoLoading(true);
+    setGeoStatus(null);
+    const result = await geocodeLocation(location);
+    setGeoLoading(false);
+    if (result) {
+      setLat(result.lat);
+      setLng(result.lng);
+      setManualLat(String(result.lat));
+      setManualLng(String(result.lng));
+      setGeoStatus({ type: 'ok', msg: `已定位：${result.displayName.slice(0, 40)}` });
+    } else {
+      setGeoStatus({ type: 'err', msg: '查無此地點，可忽略地圖功能，照常儲存其他資料' });
+    }
+  };
+
+  const handleManualCoordSave = () => {
+    const parsedLat = parseFloat(manualLat);
+    const parsedLng = parseFloat(manualLng);
+    if (isNaN(parsedLat) || isNaN(parsedLng)) {
+      setGeoStatus({ type: 'err', msg: '請輸入有效的數字' });
+      return;
+    }
+    if (parsedLat < -90 || parsedLat > 90 || parsedLng < -180 || parsedLng > 180) {
+      setGeoStatus({ type: 'err', msg: '座標範圍不正確（緯度 -90~90，經度 -180~180）' });
+      return;
+    }
+    setLat(parsedLat);
+    setLng(parsedLng);
+    setGeoStatus({ type: 'ok', msg: `已手動設定座標：${parsedLat}, ${parsedLng}` });
+    setShowManualCoord(false);
+  };
+
+  const handlePhotoSelect = async (evt) => {
+    const files = Array.from(evt.target.files || []);
+    for (const file of files) {
+      try {
+        const compressed = await compressImage(file);
+        setPhotos((prev) => [...prev, compressed]);
+      } catch (err) { console.error('Photo compression failed', err); }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removePhoto = (idx) => setPhotos((prev) => prev.filter((_, i) => i !== idx));
+  const toggleCategory = (id) => setCategoryIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  const removeCategoryTag = (id) => setCategoryIds((prev) => prev.filter((x) => x !== id));
+  const catName = (id) => categories.find((c) => c.id === id)?.name || '（已刪除的分類）';
+  const toggleMediumTag = (id) => setMediumTagIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  const removeMediumTag = (id) => setMediumTagIds((prev) => prev.filter((x) => x !== id));
+  const mediumTagName = (id) => mediumTags.find((t) => t.id === id)?.name || '（已刪除的標籤）';
+
+  const handleSave = async () => {
+    if (!location.trim()) { alert('請輸入蓋章地點'); return; }
+    setSaving(true);
+    try {
+      const stampData = {
+        stampName: stampName.trim(),
+        location: location.trim(), date, note: note.trim(),
+        lat: lat ?? null, lng: lng ?? null, photos, categoryIds, mediumTagIds, updatedAt: serverTimestamp()
+      };
+      if (isEdit) {
+        await updateDoc(doc(db, 'stamps', editingStamp.id), stampData);
+      } else {
+        stampData.createdAt = serverTimestamp();
+        await addDoc(collection(db, 'stamps'), stampData);
+      }
+      onSaved(prefill?.fromWishlistId || null);
+    } catch (err) {
+      console.error('Save failed', err);
+      alert('儲存失敗，請稍後再試');
+    } finally { setSaving(false); }
+  };
+
+  return e('div', { className: 'modal-overlay', onClick: (ev) => { if (ev.target === ev.currentTarget) onClose(); } },
+    e('div', { className: 'modal-box' },
+      e('h3', { className: 'modal-title' }, isEdit ? '編輯蓋章紀錄' : '新增蓋章紀錄'),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '印章名稱（選填，例如同一地點辦過多場活動時用來區分）'),
+        e('input', {
+          className: 'field-input', placeholder: '例如：莫札特特展紀念章',
+          value: stampName, onChange: (ev) => setStampName(ev.target.value)
+        })
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '蓋章地點'),
+        e('div', { style: { display: 'flex', gap: 8 } },
+          e('input', {
+            className: 'field-input', placeholder: '例如：台北市立美術館', value: location,
+            onChange: (ev) => { setLocation(ev.target.value); setGeoStatus(null); }
+          }),
+          e('button', { className: 'btn btn-sm', onClick: handleGeocode, disabled: geoLoading }, geoLoading ? '查詢中…' : '查座標')
+        ),
+        geoStatus && e('div', { className: 'geocode-status ' + geoStatus.type }, geoStatus.msg),
+        !showManualCoord
+          ? e('button', { className: 'manual-coord-toggle', onClick: () => setShowManualCoord(true) }, '查不到地點？手動輸入座標')
+          : e('div', null,
+              e('div', { className: 'manual-coord-row' },
+                e('input', {
+                  className: 'field-input', placeholder: '緯度，例如 25.0330', inputMode: 'decimal',
+                  value: manualLat, onChange: (ev) => setManualLat(ev.target.value)
+                }),
+                e('input', {
+                  className: 'field-input', placeholder: '經度，例如 121.5654', inputMode: 'decimal',
+                  value: manualLng, onChange: (ev) => setManualLng(ev.target.value)
+                }),
+                e('button', { className: 'btn btn-sm', onClick: handleManualCoordSave }, '套用')
+              ),
+              e('div', { className: 'field-hint' }, '可到 Google 地圖長按該地點，彈出的座標數字依序是緯度、經度')
+            )
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '日期'),
+        e('input', { type: 'date', className: 'field-input', value: date, onChange: (ev) => setDate(ev.target.value) })
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '分類標籤（可多選，例如同時掛「信義區」與「期間限定2026」）'),
+        e('div', { className: 'selected-tags-box' },
+          categoryIds.length === 0
+            ? e('span', { className: 'selected-tags-empty' }, '尚未選擇分類')
+            : categoryIds.map((id) => e('span', { key: id, className: 'selected-tag-pill' }, catName(id), e('button', { onClick: () => removeCategoryTag(id) }, '×')))
+        ),
+        e('div', { className: 'tree-picker-wrap', style: { marginTop: 8 } },
+          e('button', { className: 'filter-add-btn', onClick: () => setPickerOpen((v) => !v) }, '+ 選擇分類'),
+          pickerOpen && e(TreePicker, { categories, selectedIds: categoryIds, onToggle: toggleCategory, onClose: () => setPickerOpen(false) })
+        )
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '形式標籤（可多選，例如同時是「套色章」與「明信片」，與分類是兩套獨立系統）'),
+        e('div', { className: 'selected-tags-box' },
+          mediumTagIds.length === 0
+            ? e('span', { className: 'selected-tags-empty' }, '尚未選擇形式')
+            : mediumTagIds.map((id) => e('span', { key: id, className: 'selected-tag-pill medium' }, mediumTagName(id), e('button', { onClick: () => removeMediumTag(id) }, '×')))
+        ),
+        e('div', { className: 'tree-picker-wrap', style: { marginTop: 8 } },
+          e('button', { className: 'filter-add-btn', onClick: () => setMediumPickerOpen((v) => !v) }, '+ 選擇形式'),
+          mediumPickerOpen && e(MediumTagPicker, { mediumTags, selectedIds: mediumTagIds, onToggle: toggleMediumTag, onClose: () => setMediumPickerOpen(false) })
+        )
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '心得'),
+        e('textarea', {
+          className: 'field-textarea', placeholder: '寫下這次蓋章的心得、印象深刻的細節……',
+          value: note, onChange: (ev) => setNote(ev.target.value)
+        })
+      ),
+
+      e('div', { className: 'field-group' },
+        e('label', { className: 'field-label' }, '照片'),
+        e('div', { className: 'photo-upload-zone', onClick: () => fileInputRef.current?.click() }, '點擊上傳照片（可多選，自動壓縮）'),
+        e('input', { ref: fileInputRef, type: 'file', accept: 'image/*', multiple: true, style: { display: 'none' }, onChange: handlePhotoSelect }),
+        photos.length > 0 && e('div', { className: 'photo-preview-row' },
+          photos.map((p, idx) => e('div', { key: idx, className: 'photo-preview-thumb' },
+            e('img', { src: p }), e('button', { className: 'photo-preview-remove', onClick: () => removePhoto(idx) }, '×')
+          ))
+        )
+      ),
+
+      e('div', { className: 'modal-actions' },
+        e('button', { className: 'btn btn-ghost', onClick: onClose }, '取消'),
+        e('button', { className: 'btn btn-primary', onClick: handleSave, disabled: saving }, saving ? '儲存中…' : '儲存')
+      )
+    )
+  );
+}
+
+function StampDetailModal({ stamp, categories, mediumTags, onClose, onEdit, onDelete }) {
+  const tagNames = (stamp.categoryIds || []).map((id) => categories.find((c) => c.id === id)?.name).filter(Boolean);
+  const mediumTagNames = (stamp.mediumTagIds || []).map((id) => mediumTags.find((t) => t.id === id)?.name).filter(Boolean);
+  const title = displayName(stamp);
+  const showLocationLine = stamp.location && stamp.location !== title;
+  return e('div', { className: 'modal-overlay', onClick: (ev) => { if (ev.target === ev.currentTarget) onClose(); } },
+    e('div', { className: 'modal-box' },
+      e('h3', { className: 'modal-title' }, title),
+      showLocationLine && e('div', { className: 'detail-meta-line' }, '地點：', stamp.location),
+      e('div', { className: 'detail-meta-line' }, '日期：', formatDate(stamp.date)),
+      stamp.photos && stamp.photos.length > 0 && e('div', { className: 'detail-photo-strip' }, stamp.photos.map((p, idx) => e('img', { key: idx, src: p }))),
+      stamp.note && e('div', { className: 'detail-note' }, stamp.note),
+      (tagNames.length > 0 || mediumTagNames.length > 0) && e('div', { className: 'detail-tags-row' },
+        tagNames.map((name, i) => e('span', { key: 'c' + i, className: 'stamp-tag-mini' }, name)),
+        mediumTagNames.map((name, i) => e('span', { key: 'm' + i, className: 'medium-tag-mini' }, name))
+      ),
+      e('div', { className: 'modal-actions' },
+        e('button', { className: 'btn btn-ghost', onClick: () => onDelete(stamp) }, '刪除'),
+        e('button', { className: 'btn', onClick: () => onEdit(stamp) }, '編輯'),
+        e('button', { className: 'btn btn-primary', onClick: onClose }, '關閉')
+      )
+    )
+  );
+}
+
+function CalendarView({ stamps, onSelectStamp }) {
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth()); // 0-indexed
+  const [selectedDate, setSelectedDate] = useState(toDateKey(today));
+
+  const stampsByDate = useMemo(() => groupStampsByDate(stamps), [stamps]);
+  const cells = useMemo(() => buildCalendarCells(year, month), [year, month]);
+
+  const goPrevMonth = () => {
+    if (month === 0) { setYear((y) => y - 1); setMonth(11); }
+    else setMonth((m) => m - 1);
+  };
+  const goNextMonth = () => {
+    if (month === 11) { setYear((y) => y + 1); setMonth(0); }
+    else setMonth((m) => m + 1);
+  };
+
+  const todayKey = toDateKey(today);
+  const selectedStamps = stampsByDate[selectedDate] || [];
+
+  return e('div', { className: 'calendar-box' },
+    e('div', { className: 'calendar-nav' },
+      e('button', { className: 'calendar-nav-btn', onClick: goPrevMonth }, '‹'),
+      e('div', { className: 'calendar-month-label' }, `${year} 年 ${month + 1} 月`),
+      e('button', { className: 'calendar-nav-btn', onClick: goNextMonth }, '›')
+    ),
+    e('div', { className: 'calendar-grid' },
+      ['日', '一', '二', '三', '四', '五', '六'].map((w) => e('div', { key: w, className: 'calendar-weekday' }, w)),
+      cells.map((d, idx) => {
+        if (!d) return e('div', { key: idx, className: 'calendar-day-cell empty' });
+        const dateKey = toDateKey(d);
+        const hasStamp = !!stampsByDate[dateKey];
+        const isToday = dateKey === todayKey;
+        const isSelected = dateKey === selectedDate;
+        const cls = ['calendar-day-cell'];
+        if (hasStamp) cls.push('has-stamp');
+        if (isToday) cls.push('is-today');
+        if (isSelected) cls.push('is-selected');
+        return e('div', {
+          key: idx, className: cls.join(' '),
+          onClick: () => setSelectedDate(dateKey)
+        }, d.getDate());
+      })
+    ),
+    e('div', { className: 'calendar-day-detail' },
+      e('div', { className: 'calendar-day-detail-title' }, `${selectedDate} 的蓋章紀錄（${selectedStamps.length} 枚）`),
+      selectedStamps.length === 0
+        ? e('div', { className: 'calendar-day-detail-empty' }, '這天沒有蓋章紀錄')
+        : e('div', { className: 'stamp-grid' },
+            selectedStamps.map((s) => {
+              const title = displayName(s);
+              return e('div', { key: s.id, className: 'stamp-card', onClick: () => onSelectStamp(s) },
+                s.photos && s.photos[0]
+                  ? e('img', { className: 'stamp-photo', src: s.photos[0] })
+                  : e('div', { className: 'stamp-photo-placeholder' }, title[0]),
+                e('div', { className: 'stamp-card-body' },
+                  e('div', { className: 'stamp-location' }, title),
+                  s.note && e('div', { className: 'stamp-note-preview' }, s.note)
+                )
+              );
+            })
+          )
+    )
+  );
+}
+
+function MapView({ stamps, onSelectStamp }) {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+
+  useEffect(() => {
+    if (!mapRef.current || mapInstanceRef.current) return;
+    const map = L.map(mapRef.current).setView([23.6978, 120.9605], 7);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+      subdomains: 'abcd', maxZoom: 19
+    }).addTo(map);
+    mapInstanceRef.current = map;
+  }, []);
+
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    const markers = [];
+    const located = stamps.filter((s) => s.lat != null && s.lng != null);
+    const groups = groupByCoordinate(located);
+
+    groups.forEach((group) => {
+      const [lat, lng] = [group[0].lat, group[0].lng];
+
+      if (group.length === 1) {
+        const s = group[0];
+        const marker = L.circleMarker([lat, lng], { radius: 8, fillColor: '#B7705A', fillOpacity: 0.85, color: '#fff', weight: 2 }).addTo(map);
+
+        const popupEl = document.createElement('div');
+        popupEl.className = 'map-popup-clickable';
+        popupEl.innerHTML = `<div class="map-popup-title">${displayName(s)}</div><div class="map-popup-date">${formatDate(s.date)}</div>`;
+        popupEl.addEventListener('click', () => {
+          map.closePopup();
+          if (onSelectStamp) onSelectStamp(s);
+        });
+
+        marker.bindPopup(popupEl);
+        markers.push(marker);
+        return;
+      }
+
+      // 同地點多筆 → 數字徽章,點擊展開清單供選擇
+      const icon = L.divIcon({
+        className: '',
+        html: `<div class="map-cluster-badge">${group.length}</div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
+      });
+      const marker = L.marker([lat, lng], { icon }).addTo(map);
+
+      const popupEl = document.createElement('div');
+      const listTitle = document.createElement('div');
+      listTitle.className = 'map-popup-list-title';
+      listTitle.textContent = `這個地點有 ${group.length} 枚印章`;
+      popupEl.appendChild(listTitle);
+
+      group.forEach((s) => {
+        const item = document.createElement('div');
+        item.className = 'map-popup-list-item';
+        item.innerHTML = `<span class="map-popup-title">${displayName(s)}</span><span class="map-popup-date">${formatDate(s.date)}</span>`;
+        item.addEventListener('click', () => {
+          map.closePopup();
+          if (onSelectStamp) onSelectStamp(s);
+        });
+        popupEl.appendChild(item);
+      });
+
+      marker.bindPopup(popupEl);
+      markers.push(marker);
+    });
+
+    if (located.length > 0) {
+      const bounds = L.latLngBounds(located.map((s) => [s.lat, s.lng]));
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    }
+    return () => markers.forEach((m) => m.remove());
+  }, [stamps]);
+
+  const unlocated = stamps.filter((s) => s.lat == null || s.lng == null);
+
+  return e('div', null,
+    e('div', { className: 'map-container', ref: mapRef }),
+    unlocated.length > 0 && e('div', { style: { marginTop: 14, fontSize: 12, color: 'var(--ink-soft)' } }, `${unlocated.length} 筆紀錄尚未定位座標，不會顯示在地圖上。`)
+  );
+}
+
+function App() {
+  const [view, setView] = useState('journal');
+  const [journalSubView, setJournalSubView] = useState('list'); // 'list' | 'calendar'
+  const [listLayout, setListLayout] = useState('grid'); // 'grid' | 'compact'
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem('stamp-journal-theme') || 'light'; }
+    catch { return 'light'; }
+  });
+  const [stamps, setStamps] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [mediumTags, setMediumTags] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editingStamp, setEditingStamp] = useState(null);
+  const [stampPrefill, setStampPrefill] = useState(null);
+  const [detailStamp, setDetailStamp] = useState(null);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showMediumTagManager, setShowMediumTagManager] = useState(false);
+  const [selectedFilterIds, setSelectedFilterIds] = useState([]);
+  const [selectedMediumFilterIds, setSelectedMediumFilterIds] = useState([]);
+  const [wishlist, setWishlist] = useState([]);
+  const [showWishlistForm, setShowWishlistForm] = useState(false);
+  const [editingWishlistItem, setEditingWishlistItem] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem('stamp-journal-theme', theme); } catch {}
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+
+  useEffect(() => {
+    const q = query(collection(db, 'stamps'), orderBy('date', 'desc'));
+    const unsub = onSnapshot(q, (snap) => {
+      setStamps(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, (err) => { console.error(err); setLoading(false); });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'categories'), orderBy('createdAt', 'asc'));
+    const unsub = onSnapshot(q, (snap) => setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), (err) => console.error(err));
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'mediumTags'), orderBy('createdAt', 'asc'));
+    const unsub = onSnapshot(q, (snap) => setMediumTags(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), (err) => console.error(err));
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'wishlist'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (snap) => setWishlist(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), (err) => console.error(err));
+    return unsub;
+  }, []);
+
+  const visibleStamps = useMemo(() => {
+    let result = stamps;
+    if (selectedFilterIds.length > 0) {
+      const expandedIds = new Set();
+      selectedFilterIds.forEach((id) => { getDescendantIds(categories, id).forEach((d) => expandedIds.add(d)); });
+      result = result.filter((s) => (s.categoryIds || []).some((cid) => expandedIds.has(cid)));
+    }
+    if (selectedMediumFilterIds.length > 0) {
+      result = result.filter((s) => (s.mediumTagIds || []).some((tid) => selectedMediumFilterIds.includes(tid)));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter((s) =>
+        (displayName(s) || '').toLowerCase().includes(q) ||
+        (s.location || '').toLowerCase().includes(q) ||
+        (s.note || '').toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [stamps, selectedFilterIds, selectedMediumFilterIds, categories, searchQuery]);
+
+  const handleSaved = async (fromWishlistId) => {
+    setShowForm(false);
+    setEditingStamp(null);
+    setStampPrefill(null);
+    if (fromWishlistId) {
+      try { await deleteDoc(doc(db, 'wishlist', fromWishlistId)); }
+      catch (err) { console.error('清除待蓋項目失敗', err); }
+    }
+  };
+
+  const handleDelete = async (stamp) => {
+    if (!confirm(`確定刪除「${displayName(stamp)}」這筆紀錄嗎？`)) return;
+    try {
+      await deleteDoc(doc(db, 'stamps', stamp.id));
+      setDetailStamp(null);
+    } catch (err) {
+      console.error(err);
+      alert('刪除失敗');
+    }
+  };
+
+  const handleWishlistSaved = () => { setShowWishlistForm(false); setEditingWishlistItem(null); };
+
+  const handleDeleteWishlistItem = async (item) => {
+    if (!confirm(`確定刪除待蓋項目「${displayName(item)}」嗎？`)) return;
+    try { await deleteDoc(doc(db, 'wishlist', item.id)); }
+    catch (err) { console.error(err); alert('刪除失敗'); }
+  };
+
+  const handleMarkAsStamped = (item) => {
+    setStampPrefill({
+      stampName: item.stampName || '',
+      location: item.location || '',
+      categoryIds: item.categoryIds || [],
+      photos: item.photos || [],
+      fromWishlistId: item.id
+    });
+    setEditingStamp(null);
+    setShowForm(true);
+  };
+
+  return e('div', { className: 'app-shell' },
+    e('div', { className: 'app-header' },
+      e('div', null,
+        e('div', { className: 'app-title' }, e('span', { className: 'seal-mark' }, '印'), '蓋印紀念冊'),
+        e('div', { className: 'app-subtitle' }, `共 ${stamps.length} 枚印章 · ${categories.length} 個分類`)
+      ),
+      e('div', { className: 'header-actions' },
+        e('button', {
+          className: 'theme-toggle-btn',
+          onClick: toggleTheme,
+          title: theme === 'dark' ? '切換成淺色模式' : '切換成深色模式'
+        }, theme === 'dark' ? '☾' : '☀'),
+        e('button', { className: 'btn btn-sm', onClick: () => setShowMediumTagManager(true) }, '管理形式標籤'),
+        e('button', { className: 'btn btn-sm', onClick: () => setShowCategoryManager(true) }, '管理分類')
+      )
+    ),
+
+    e('div', { className: 'nav-tabs' },
+      e('button', { className: 'nav-tab' + (view === 'journal' ? ' active' : ''), onClick: () => setView('journal') }, '紀念冊'),
+      e('button', { className: 'nav-tab' + (view === 'map' ? ' active' : ''), onClick: () => setView('map') }, '地圖'),
+      e('button', { className: 'nav-tab' + (view === 'wishlist' ? ' active' : ''), onClick: () => setView('wishlist') }, `待蓋清單${wishlist.length ? ' (' + wishlist.length + ')' : ''}`)
+    ),
+
+    view !== 'wishlist' && e(FilterBar, {
+      categories, selectedFilterIds, setSelectedFilterIds,
+      mediumTags, selectedMediumFilterIds, setSelectedMediumFilterIds
+    }),
+
+    view === 'journal' && journalSubView === 'list' && e('div', { className: 'search-bar' },
+      e('span', { className: 'search-icon' }, '🔍'),
+      e('input', {
+        className: 'search-input', type: 'text',
+        placeholder: '搜尋印章名稱、地點、心得…',
+        value: searchQuery, onChange: (ev) => setSearchQuery(ev.target.value)
+      }),
+      searchQuery && e('button', { className: 'search-clear', onClick: () => setSearchQuery('') }, '×')
+    ),
+
+    view === 'journal' && e('div', { className: 'sub-tabs-row' },
+      e('div', { className: 'sub-tabs' },
+        e('button', { className: 'sub-tab' + (journalSubView === 'list' ? ' active' : ''), onClick: () => setJournalSubView('list') }, '列表'),
+        e('button', { className: 'sub-tab' + (journalSubView === 'calendar' ? ' active' : ''), onClick: () => setJournalSubView('calendar') }, '日曆')
+      ),
+      journalSubView === 'list' && e('div', { className: 'layout-toggle' },
+        e('button', {
+          className: 'layout-toggle-btn' + (listLayout === 'grid' ? ' active' : ''),
+          onClick: () => setListLayout('grid'), title: '卡片視圖'
+        }, '▦'),
+        e('button', {
+          className: 'layout-toggle-btn' + (listLayout === 'compact' ? ' active' : ''),
+          onClick: () => setListLayout('compact'), title: '列表視圖'
+        }, '☰')
+      )
+    ),
+
+    loading && e('div', { className: 'loading-text' }, '載入中…'),
+
+    !loading && view === 'journal' && journalSubView === 'list' && (
+      visibleStamps.length === 0
+        ? e('div', { className: 'empty-state' },
+            e('div', { className: 'empty-state-icon' }, '印'),
+            e('div', { className: 'empty-state-text' }, stamps.length === 0 ? '還沒有蓋章紀錄，點右下角開始第一筆吧' : '這個篩選條件下沒有紀錄')
+          )
+        : listLayout === 'grid'
+        ? e('div', { className: 'stamp-grid' },
+            visibleStamps.map((s) => {
+              const title = displayName(s);
+              const showVenue = s.location && s.location !== title;
+              return e('div', { key: s.id, className: 'stamp-card', onClick: () => setDetailStamp(s) },
+                s.photos && s.photos[0]
+                  ? e('img', { className: 'stamp-photo', src: s.photos[0] })
+                  : e('div', { className: 'stamp-photo-placeholder' }, title[0]),
+                e('div', { className: 'stamp-card-body' },
+                  e('div', { className: 'stamp-location' }, title),
+                  showVenue && e('div', { className: 'stamp-venue' }, s.location),
+                  e('div', { className: 'stamp-date' }, formatDate(s.date)),
+                  s.note && e('div', { className: 'stamp-note-preview' }, s.note),
+                  ((s.categoryIds || []).length > 0 || (s.mediumTagIds || []).length > 0) && e('div', { className: 'stamp-tag-row' },
+                    (s.categoryIds || []).slice(0, 3).map((cid) => {
+                      const name = categories.find((c) => c.id === cid)?.name;
+                      return name ? e('span', { key: 'c' + cid, className: 'stamp-tag-mini' }, name) : null;
+                    }),
+                    (s.mediumTagIds || []).slice(0, 3).map((tid) => {
+                      const name = mediumTags.find((t) => t.id === tid)?.name;
+                      return name ? e('span', { key: 'm' + tid, className: 'medium-tag-mini' }, name) : null;
+                    })
+                  )
+                )
+              );
+            })
+          )
+        : e('div', { className: 'stamp-compact-list' },
+            visibleStamps.map((s) => {
+              const title = displayName(s);
+              const showVenue = s.location && s.location !== title;
+              const metaText = [showVenue ? s.location : null, formatDate(s.date)].filter(Boolean).join(' · ');
+              return e('div', { key: s.id, className: 'stamp-compact-row', onClick: () => setDetailStamp(s) },
+                e('div', { className: 'stamp-compact-thumb' },
+                  s.photos && s.photos[0] ? e('img', { src: s.photos[0] }) : title[0]
+                ),
+                e('div', { className: 'stamp-compact-body' },
+                  e('div', { className: 'stamp-compact-title' }, title),
+                  e('div', { className: 'stamp-compact-meta' }, metaText)
+                )
+              );
+            })
+          )
+    ),
+
+    !loading && view === 'journal' && journalSubView === 'calendar' && e(CalendarView, { stamps: visibleStamps, onSelectStamp: setDetailStamp }),
+
+    !loading && view === 'map' && e(MapView, { stamps: visibleStamps, onSelectStamp: setDetailStamp }),
+
+    !loading && view === 'wishlist' && (
+      wishlist.length === 0
+        ? e('div', { className: 'empty-state' },
+            e('div', { className: 'empty-state-icon' }, '印'),
+            e('div', { className: 'empty-state-text' }, '還沒有待蓋項目，點右下角新增想去蓋的章吧')
+          )
+        : e('div', { className: 'wishlist-list' },
+            wishlist.map((item) => {
+              const title = displayName(item);
+              const showVenue = item.location && item.location !== title;
+              const dueSoon = isDueSoon(item.deadline);
+              return e('div', { key: item.id, className: 'wishlist-card' + (dueSoon ? ' due-soon' : '') },
+                e('div', { className: 'wishlist-icon' },
+                  item.photos && item.photos[0] ? e('img', { src: item.photos[0] }) : title[0]
+                ),
+                e('div', { className: 'wishlist-body' },
+                  e('div', { className: 'wishlist-top-row' },
+                    e('div', { style: { minWidth: 0, flex: 1 } },
+                      e('div', { className: 'wishlist-name' }, title),
+                      showVenue && e('div', { className: 'wishlist-venue' }, item.location)
+                    ),
+                    item.deadline && e('div', { className: 'wishlist-deadline' + (dueSoon ? ' due-soon' : '') }, '期限 ', formatDate(item.deadline))
+                  ),
+                  item.note && e('div', { className: 'wishlist-note' }, item.note),
+                  item.sourceUrl && e('a', {
+                    className: 'wishlist-source-link',
+                    href: item.sourceUrl,
+                    target: '_blank',
+                    rel: 'noopener noreferrer'
+                  }, '🔗 ', item.sourceUrl),
+                  (item.categoryIds || []).length > 0 && e('div', { className: 'wishlist-tag-row' },
+                    item.categoryIds.map((cid) => {
+                      const name = categories.find((c) => c.id === cid)?.name;
+                      return name ? e('span', { key: cid, className: 'stamp-tag-mini' }, name) : null;
+                    })
+                  ),
+                  e('div', { className: 'wishlist-actions' },
+                    e('button', { className: 'btn btn-sm', onClick: () => { setEditingWishlistItem(item); setShowWishlistForm(true); } }, '編輯'),
+                    e('button', { className: 'btn btn-sm btn-ghost', onClick: () => handleDeleteWishlistItem(item) }, '刪除'),
+                    e('button', { className: 'btn btn-sm btn-primary', onClick: () => handleMarkAsStamped(item) }, '已蓋章 →')
+                  )
+                )
+              );
+            })
+          )
+    ),
+
+    e('button', {
+      className: 'fab',
+      onClick: () => {
+        if (view === 'wishlist') { setEditingWishlistItem(null); setShowWishlistForm(true); }
+        else { setEditingStamp(null); setStampPrefill(null); setShowForm(true); }
+      }
+    }, '+'),
+
+    showForm && e(StampFormModal, {
+      categories, mediumTags, editingStamp, prefill: stampPrefill,
+      onClose: () => { setShowForm(false); setEditingStamp(null); setStampPrefill(null); },
+      onSaved: handleSaved
+    }),
+
+    showWishlistForm && e(WishlistFormModal, {
+      categories, editingItem: editingWishlistItem,
+      onClose: () => { setShowWishlistForm(false); setEditingWishlistItem(null); },
+      onSaved: handleWishlistSaved
+    }),
+
+    detailStamp && e(StampDetailModal, {
+      stamp: detailStamp, categories, mediumTags,
+      onClose: () => setDetailStamp(null),
+      onEdit: (s) => { setDetailStamp(null); setEditingStamp(s); setShowForm(true); },
+      onDelete: handleDelete
+    }),
+
+    showCategoryManager && e(CategoryManagerModal, { categories, onClose: () => setShowCategoryManager(false) }),
+
+    showMediumTagManager && e(MediumTagManagerModal, {
+      mediumTags, onMediumTagsChange: setMediumTags, onClose: () => setShowMediumTagManager(false)
+    })
+  );
+}
+
+const root = createRoot(document.getElementById('root'));
+root.render(e(App));
+</script>
+</body>
+</html>
