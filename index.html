@@ -25,7 +25,7 @@
   }
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>我的資產</title>
+<title>林間帳本 Grove</title>
 <link rel="icon" href="./favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16.png">
@@ -1721,6 +1721,33 @@ function CalendarTab({categories, accounts, monthTx, cursorMonth, onAddOnDate, o
   const dayList = activeDay? txOnDay(activeDay) : [];
   const activeDs = activeDay? cursorMonth.getFullYear()+"-"+pad(cursorMonth.getMonth()+1)+"-"+pad(activeDay) : null;
 
+  // 每日趨勢圖資料
+  const dailyData = useMemo(()=>{
+    const key = cursorMonth.getFullYear()+"-"+pad(cursorMonth.getMonth()+1);
+    const days = [];
+    for(let d=1;d<=dim;d++){
+      const ds = key+"-"+pad(d);
+      const dayTx = monthTx.filter(t=>t.date===ds);
+      const income = dayTx.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
+      const expense = dayTx.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+      days.push({d, net: income - expense, income, expense});
+    }
+    return days;
+  }, [monthTx, cursorMonth, dim]);
+
+  const hasAnyData = dailyData.some(d=>d.income>0||d.expense>0);
+  const BAR_W = 7, GAP = 3;
+  const chartH = 120, PL = 54, PT = 12, PB = 22;
+  const allNets = dailyData.map(d=>d.net);
+  const rawMax = Math.max(0, ...allNets);
+  const rawMin = Math.min(0, ...allNets);
+  const yMax = niceMax(rawMax) || 1000;
+  const yMin = rawMin < 0 ? -niceMax(Math.abs(rawMin)) : 0;
+  const yRange = yMax - yMin;
+  function yPos(v){ return PT + chartH - ((v-yMin)/yRange)*chartH; }
+  const zeroY = yPos(0);
+  const totalW = PL + dailyData.length*(BAR_W+GAP) + 8;
+
   return (
     <div>
       <div className="calendar-grid">
@@ -1740,6 +1767,61 @@ function CalendarTab({categories, accounts, monthTx, cursorMonth, onAddOnDate, o
           );
         })}
       </div>
+
+      {hasAnyData &&
+        <div className="chart-card" style={{marginTop:14}}>
+          <h3>每日收支淨額</h3>
+          <div className="chart-scroll-wrap">
+            <svg width={totalW} height={chartH+PT+PB} style={{display:"block",overflow:"visible",fontFamily:"inherit"}}>
+              {/* Y軸格線 */}
+              {[yMin, (yMin+yMax)/2, yMax].filter((v,i,a)=>a.indexOf(v)===i).map((v,i)=>(
+                <g key={i}>
+                  <line x1={PL} y1={yPos(v)} x2={totalW} y2={yPos(v)}
+                    stroke="var(--line)" strokeDasharray="3,3" strokeWidth={1}/>
+                  <text x={PL-4} y={yPos(v)+4} textAnchor="end" fontSize={9} fill="var(--ink-soft)">
+                    {Math.round(v).toLocaleString("zh-Hant-TW")}
+                  </text>
+                </g>
+              ))}
+              {/* 零線 */}
+              <line x1={PL} y1={zeroY} x2={totalW} y2={zeroY}
+                stroke="var(--ink-soft)" strokeWidth={1} />
+              {/* 長條 */}
+              {dailyData.map(({d, net},i)=>{
+                const x = PL + i*(BAR_W+GAP);
+                const barTop = yPos(Math.max(0,net));
+                const barBot = yPos(Math.min(0,net));
+                const barH = Math.max(1, barBot - barTop);
+                const color = net>=0 ? "var(--income)" : "var(--expense)";
+                return (
+                  <g key={i} onClick={()=>setActiveDay(d)} style={{cursor:"pointer"}}>
+                    <rect x={x} y={barTop} width={BAR_W} height={barH}
+                      fill={color} opacity={activeDay===d?1:0.8} rx={2}/>
+                  </g>
+                );
+              })}
+              {/* X軸標籤（每5天） */}
+              {dailyData.map(({d},i)=>{
+                if(d!==1 && d%5!==0) return null;
+                const x = PL + i*(BAR_W+GAP) + BAR_W/2;
+                return (
+                  <text key={i} x={x} y={chartH+PT+PB-4} textAnchor="middle"
+                    fontSize={9} fill="var(--ink-soft)">{d}</text>
+                );
+              })}
+            </svg>
+          </div>
+          {activeDay &&
+            <div className="chart-detail">
+              <span className="lbl">{cursorMonth.getMonth()+1}月{activeDay}日</span>
+              <span>
+                收入 <b style={{color:"var(--income)"}}>{fmtMoney(dailyData[activeDay-1]?.income||0)}</b>　
+                支出 <b style={{color:"var(--expense)"}}>{fmtMoney(dailyData[activeDay-1]?.expense||0)}</b>
+              </span>
+            </div>
+          }
+        </div>
+      }
 
       {activeDay &&
         <div className="sheet-overlay" onClick={()=>setActiveDay(null)}>
@@ -2649,7 +2731,7 @@ function App(){
   return (
     <div className="app">
       <div className="header">
-        <h1>我的資產</h1>
+        <h1>林間帳本 Grove</h1>
         <button className="theme-toggle" onClick={()=>setDarkMode(d=>!d)}>{darkMode?"☀️":"🌙"}</button>
       </div>
       {tab==="home" && homeMode==="list" &&

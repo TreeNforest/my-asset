@@ -1,10 +1,10 @@
 {
   "name": "林間帳本 Grove",
-  "short_name": "Grove",
+  "short_name": "林間帳本",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#EDF0ED",
-  "theme_color": "#EDF0ED",
+  "background_color": "#F2EFEA",
+  "theme_color": "#F2EFEA",
   "icons": [
     {
       "src": "icon-192.png",
