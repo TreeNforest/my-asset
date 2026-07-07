@@ -149,6 +149,7 @@
   .action-btn.transfer .ic{background:#3B82F6;}
   .action-btn.expense .ic{background:var(--expense);}
   .action-btn.income .ic{background:var(--income);}
+  .action-btn.fixed .ic{background:#D97706;}
   .empty-hint{text-align:center;color:var(--ink-soft);font-size:14px;padding:30px 0;}
   .search-bar-wrap{position:relative;margin-bottom:14px;}
   .search-bar-wrap input{width:100%;padding:10px 36px 10px 36px;border:1px solid var(--line);
@@ -1305,13 +1306,94 @@ function TransferModal({accounts, initial, onSave, onDelete, onClose}){
   );
 }
 
+function NewFixedDepositModal({accounts, onSave, onClose}){
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [fromAccountId, setFromAccountId] = useState(accounts.find(a=>a.type==="checking")?.id||"");
+  const [rate, setRate] = useState("");
+  const [startDate, setStartDate] = useState(toDateStr(new Date()));
+  const [endDate, setEndDate] = useState("");
+  const [interestAccountId, setInterestAccountId] = useState(accounts.find(a=>a.type==="checking")?.id||"");
+
+  const principal = parseFloat(amount)||0;
+  const rateVal = parseFloat(rate)||0;
+  const monthly = principal * rateVal/100/12;
+
+  function submit(){
+    if(!name.trim()){ alert("請輸入定存名稱"); return; }
+    if(!principal || principal<=0){ alert("請輸入定存金額"); return; }
+    if(!fromAccountId){ alert("請選擇轉出帳戶"); return; }
+    onSave({
+      name:name.trim(), amount:principal,
+      fromAccountId, rate:rateVal||null,
+      startDate, endDate:endDate||null,
+      interestAccountId:interestAccountId||null,
+    });
+  }
+
+  const nonFixed = accounts.filter(a=>a.type!=="fixed");
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>🔐 新增定存</h2>
+        <div className="field">
+          <label>定存名稱</label>
+          <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="例如：臺灣銀行定存" />
+        </div>
+        <div className="field">
+          <label>定存金額</label>
+          <CalcInput value={amount} onChange={setAmount} />
+        </div>
+        <div className="field">
+          <label>從（轉出帳戶）</label>
+          <select value={fromAccountId} onChange={e=>setFromAccountId(e.target.value)}>
+            {accountSelectGroups(nonFixed)}
+          </select>
+        </div>
+        <div className="field">
+          <label>年利率（%）</label>
+          <input type="number" inputMode="decimal" step="0.001" value={rate}
+            onChange={e=>setRate(e.target.value)} placeholder="例如 1.735" />
+        </div>
+        <div className="field">
+          <label>起始日</label>
+          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>到期日</label>
+          <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>利息存入帳戶</label>
+          <select value={interestAccountId} onChange={e=>setInterestAccountId(e.target.value)}>
+            <option value="">（存在定存帳戶本身）</option>
+            {accountSelectGroups(nonFixed)}
+          </select>
+        </div>
+        {principal>0 && rateVal>0 &&
+          <div style={{fontSize:13,color:"var(--ink-soft)",marginBottom:14}}>
+            預估每月利息：<b style={{color:"var(--ink)"}}>{fmtMoney(monthly)}</b>
+            （{fmtMoney(principal)} × {rateVal}% ÷ 12）
+          </div>
+        }
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>建立定存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AddActionSheet({onPick, onClose}){
   return (
     <div className="sheet-overlay" onClick={onClose}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
         <div className="sheet-handle"></div>
         <h2>新增一筆</h2>
-        <div className="action-row">
+        <div className="action-row" style={{flexWrap:"wrap",gap:20}}>
           <button className="action-btn transfer" onClick={()=>onPick("transfer")}>
             <span className="ic">🔁</span><span>轉帳</span>
           </button>
@@ -1320,6 +1402,9 @@ function AddActionSheet({onPick, onClose}){
           </button>
           <button className="action-btn income" onClick={()=>onPick("income")}>
             <span className="ic">↓</span><span>收入</span>
+          </button>
+          <button className="action-btn fixed" onClick={()=>onPick("fixed")}>
+            <span className="ic">🔐</span><span>定存</span>
           </button>
         </div>
       </div>
@@ -2809,6 +2894,7 @@ function App(){
             setShowActionMenu(false);
             setEditingTx(null);
             if(kind==="transfer"){ setAddKind("transfer"); }
+            else if(kind==="fixed"){ setAddKind("fixed"); }
             else { setAddKind("txn"); setPresetType(kind); }
             setShowAdd(true);
           }} />
@@ -2824,6 +2910,36 @@ function App(){
           initial={editingTx}
           onSave={saveTx} onDelete={deleteTx}
           onClose={closeAddModals} />
+      }
+      {showAdd && addKind==="fixed" &&
+        <NewFixedDepositModal accounts={accounts}
+          onClose={closeAddModals}
+          onSave={async(data)=>{
+            try{
+              // 1. 建立定存帳戶
+              const fixedAccounts = accounts.filter(a=>a.type==="fixed");
+              const maxOrder = fixedAccounts.reduce((m,a)=>Math.max(m,a.order||0),-1);
+              const accRef = await addDoc(collection(db,"accounts"),{
+                name:data.name, type:"fixed", icon:"🔐", iconImage:null,
+                initialBalance:0, rate:data.rate||null,
+                startDate:data.startDate||null, endDate:data.endDate||null,
+                interestAccountId:data.interestAccountId||null,
+                order:maxOrder+1,
+              });
+              // 2. 記一筆轉帳（轉出帳戶 → 新定存帳戶）
+              await addDoc(collection(db,"transactions"),{
+                type:"transfer", amount:data.amount,
+                fromAccountId:data.fromAccountId,
+                toAccountId:accRef.id,
+                categoryId:null, accountId:null,
+                date:data.startDate||toDateStr(new Date()),
+                note:data.name,
+                createdAt:Date.now(),
+              });
+              closeAddModals();
+              flash("定存帳戶已建立");
+            }catch(e){ alert("建立失敗："+e.message); }
+          }} />
       }
       {msg && <div className="top-msg">{msg}</div>}
     </div>
