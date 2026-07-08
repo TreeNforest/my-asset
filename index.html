@@ -292,7 +292,6 @@
   .cat-node{margin-bottom:6px;}
   .cat-row{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:12px;
     padding:13px 12px;box-shadow:0 1px 2px rgba(60,50,40,.05);}
-  .cat-row .dot{width:13px;height:13px;border-radius:50%;flex-shrink:0;}
   .ph-cat{font-size:22px;line-height:1;}
   .icon-picker-wrap{margin-top:8px;}
   .icon-picker-search{width:100%;border:1px solid var(--line);border-radius:10px;
@@ -1008,7 +1007,7 @@ function TxRow({t, categories, accounts, onClick}){
   const subLabel = [acc?acc.name:null, t.counterpart||null, t.note||null].filter(Boolean).join("・");
   return (
     <div className="tx-item" onClick={onClick}>
-      <div className="icon" style={{background:(cat?cat.color:"#ccc")+"22"}}>{renderCatIcon(cat?cat.icon:"❓", 20)}</div>
+      <div className="icon" style={{background:"var(--field-bg)"}}>{renderCatIcon(cat?cat.icon:"❓", 20)}</div>
       <div className="mid">
         <div className="cat">{cat?cat.name:"未分類"}</div>
         {subLabel && <div className="note">{subLabel}</div>}
@@ -1053,7 +1052,7 @@ function TxDetailSheet({t, categories, accounts, onEdit, onClose}){
   else typeLabel = isCreditAcc ? "刷卡" : "支出";
 
   const amtColor = isTransfer ? "var(--ink-soft)" : (t.type==="income" ? "var(--income)" : "var(--expense)");
-  const iconBg = isTransfer ? "var(--line)" : ((cat&&cat.color) ? cat.color+"33" : "var(--line)");
+  const iconBg = "var(--field-bg)";
   const amtPrefix = isTransfer ? "" : (t.type==="income" ? "+" : "−");
   const images = Array.isArray(t.images) ? t.images.filter(Boolean) : [];
 
@@ -1467,9 +1466,9 @@ function CategoryModal({initial, parentId, type, onSave, onClose}){
 
   function submit(){
     if(!name.trim()){ alert("請輸入分類名稱"); return; }
-    const c = /^#[0-9A-Fa-f]{6}$/.test(color.trim()) ? color.trim() : (initial&&initial.color) || PALETTE[0];
     const finalIcon = useEmoji ? (emojiVal||"📁") : icon;
-    onSave({name:name.trim(), icon:finalIcon, type, parentId: parentId||null, color:c});
+    const keepColor = (initial&&initial.color) || PALETTE[Math.floor(Math.random()*PALETTE.length)];
+    onSave({name:name.trim(), icon:finalIcon, type, parentId: parentId||null, color:keepColor});
   }
 
   return (
@@ -2294,8 +2293,7 @@ function CategoryNode({node, depth, dragHandlers, onAddChild, onEdit, onDelete, 
     <div className="cat-node">
       <div className="cat-row">
         <span className="drag-handle" {...dragHandlers}>≡</span>
-        <span className="dot" style={{background:node.color}}></span>
-        <span className="name">{renderCatIcon(node.icon,20)} {node.name}</span>
+                <span className="name">{renderCatIcon(node.icon,20)} {node.name}</span>
         <button className="icon-btn more-btn" onClick={()=>setShowActions(true)}>⋯</button>
       </div>
       {node.children.length>0 &&
