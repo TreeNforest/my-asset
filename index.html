@@ -293,6 +293,16 @@
   .cat-row{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:12px;
     padding:13px 12px;box-shadow:0 1px 2px rgba(60,50,40,.05);}
   .cat-row .dot{width:13px;height:13px;border-radius:50%;flex-shrink:0;}
+  .ph-cat{font-size:22px;line-height:1;}
+  .icon-picker-wrap{margin-top:8px;}
+  .icon-picker-search{width:100%;border:1px solid var(--line);border-radius:10px;
+    padding:9px 12px;font-size:14px;background:var(--field-bg);color:var(--ink);margin-bottom:8px;}
+  .icon-picker-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;
+    max-height:220px;overflow-y:auto;}
+  .icon-picker-btn{padding:8px 0;border:2px solid transparent;border-radius:10px;
+    background:var(--field-bg);font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .icon-picker-btn.active{border-color:var(--accent);}
+  .icon-picker-btn i{pointer-events:none;}
   .cat-row .name{flex:1;font-size:16px;font-weight:600;}
   .cat-row .budget-tag{font-size:13px;color:var(--ink-soft);}
   .cat-row .icon-btn{background:none;border:none;font-size:16px;color:var(--ink-soft);padding:4px;}
@@ -396,6 +406,7 @@
   .top-msg{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--solid);color:#fff;
     padding:9px 16px;border-radius:10px;font-size:14px;z-index:40;}
 </style>
+<script src="https://unpkg.com/@phosphor-icons/web@2.1.1" crossorigin="anonymous"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -455,6 +466,58 @@ function pad(n){return n<10?"0"+n:""+n;}
 function toDateStr(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 function fromDateStr(s){const p=s.split("-").map(Number);return new Date(p[0],p[1]-1,p[2]);}
 function monthKey(d){return d.getFullYear()+"-"+pad(d.getMonth()+1);}
+function isPhIcon(s){ return typeof s==="string" && s.startsWith("ph-"); }
+function renderCatIcon(icon, size){
+  if(isPhIcon(icon)) return <i className={"ph ph-"+icon.slice(3)} style={{fontSize:size||22,lineHeight:1}}></i>;
+  return <span style={{fontSize:size||20}}>{icon||"📁"}</span>;
+}
+
+const PH_ICONS = [
+  // 飲食
+  "ph-fork-knife","ph-coffee","ph-beer-bottle","ph-cake","ph-cooking-pot","ph-bowl-food","ph-pizza","ph-hamburger","ph-ice-cream","ph-martini",
+  // 交通
+  "ph-car","ph-bus","ph-train","ph-airplane","ph-motorcycle","ph-taxi","ph-bicycle","ph-boat","ph-train-simple","ph-subway",
+  // 購物
+  "ph-shopping-bag","ph-shopping-cart","ph-handbag","ph-storefront","ph-tag","ph-gift","ph-package","ph-receipt",
+  // 日常生活
+  "ph-house","ph-bed","ph-couch","ph-bathtub","ph-toilet","ph-broom","ph-washing-machine","ph-plug","ph-lamp",
+  // 健康醫療
+  "ph-first-aid-kit","ph-heartbeat","ph-pill","ph-stethoscope","ph-syringe","ph-bandaids","ph-tooth","ph-eye",
+  // 娛樂
+  "ph-music-note","ph-game-controller","ph-film-slate","ph-television","ph-books","ph-ticket","ph-microphone","ph-palette","ph-camera",
+  // 運動
+  "ph-barbell","ph-soccer-ball","ph-tennis-ball","ph-baseball","ph-basketball","ph-swimming-pool","ph-mountains",
+  // 服裝
+  "ph-t-shirt","ph-sneaker","ph-crown","ph-sunglasses","ph-dress",
+  // 工作學習
+  "ph-briefcase","ph-desktop","ph-laptop","ph-printer","ph-book","ph-pen","ph-pencil","ph-graduation-cap",
+  // 寵物
+  "ph-paw-print","ph-dog","ph-cat","ph-fish",
+  // 財務
+  "ph-bank","ph-credit-card","ph-currency-circle-dollar","ph-coins","ph-chart-line","ph-chart-bar","ph-piggy-bank","ph-vault","ph-safe",
+  // 其他
+  "ph-star","ph-heart","ph-lightning","ph-bell","ph-calendar","ph-map-pin","ph-phone","ph-chat","ph-person","ph-users",
+  "ph-sun","ph-moon","ph-leaf","ph-flower","ph-tree","ph-cloud","ph-drop","ph-fire","ph-snowflake","ph-recycle",
+  "ph-wrench","ph-scissors","ph-paint-brush","ph-flask","ph-atom","ph-globe","ph-flag","ph-baby","ph-child","ph-wheelchair",
+];
+
+function PhIconPicker({value, onChange}){
+  const [q, setQ] = useState("");
+  const filtered = q ? PH_ICONS.filter(ic=>ic.includes(q.toLowerCase())) : PH_ICONS;
+  return (
+    <div className="icon-picker-wrap">
+      <input className="icon-picker-search" placeholder="搜尋圖示名稱（英文）..." value={q} onChange={e=>setQ(e.target.value)} />
+      <div className="icon-picker-grid">
+        {filtered.map(ic=>(
+          <button key={ic} type="button" className={"icon-picker-btn"+(value===ic?" active":"")} onClick={()=>onChange(ic)}>
+            <i className={"ph ph-"+ic.slice(3)}></i>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function fmtMoney(n){return ""+Math.round(n||0).toLocaleString("zh-Hant-TW");}
 function maskMoney(n, masked){ return masked ? "••••••" : fmtMoney(n); }
 function safeEval(expr){
@@ -673,7 +736,7 @@ function flattenForSelect(list, type){
   const out=[];
   function walk(node, depth){
     if(node.children.length===0){
-      out.push({id:node.id, label:"\u3000".repeat(depth)+(node.icon||"")+" "+node.name});
+      out.push({id:node.id, label:"\u3000".repeat(depth)+(isPhIcon(node.icon||"")?"▪":node.icon||"")+" "+node.name});
     }else{
       node.children.forEach(ch=>walk(ch, depth+1));
     }
@@ -685,19 +748,19 @@ function categoryOptionGroups(categories, type){
   const roots = buildTree(categories.filter(c=>c.type===type));
   return roots.map(root=>{
     if(root.children.length===0){
-      return <option key={root.id} value={root.id}>{root.icon} {root.name}</option>;
+      return <option key={root.id} value={root.id}>{isPhIcon(root.icon||"")?"▪":(root.icon||"")} {root.name}</option>;
     }
     const leaves = [];
     function walk(node, depth){
       if(node.children.length===0){
-        leaves.push({id:node.id, label:"\u3000".repeat(depth)+(node.icon||"")+" "+node.name});
+        leaves.push({id:node.id, label:"\u3000".repeat(depth)+(isPhIcon(node.icon||"")?"▪":node.icon||"")+" "+node.name});
       }else{
         node.children.forEach(ch=>walk(ch, depth+1));
       }
     }
     root.children.forEach(ch=>walk(ch,0));
     return (
-      <optgroup key={root.id} label={root.icon+" "+root.name}>
+      <optgroup key={root.id} label={(isPhIcon(root.icon||"")?"▪":root.icon||"")+" "+root.name}>
         {leaves.map(l=><option key={l.id} value={l.id}>{l.label}</option>)}
       </optgroup>
     );
@@ -972,7 +1035,7 @@ function TxRow({t, categories, accounts, onClick}){
   const subLabel = [acc?acc.name:null, t.counterpart||null, t.note||null].filter(Boolean).join("・");
   return (
     <div className="tx-item" onClick={onClick}>
-      <div className="icon" style={{background:(cat?cat.color:"#ccc")+"22"}}>{cat?cat.icon:"❓"}</div>
+      <div className="icon" style={{background:(cat?cat.color:"#ccc")+"22"}}>{renderCatIcon(cat?cat.icon:"❓", 20)}</div>
       <div className="mid">
         <div className="cat">{cat?cat.name:"未分類"}</div>
         {subLabel && <div className="note">{subLabel}</div>}
@@ -1043,7 +1106,7 @@ function TxDetailSheet({t, categories, accounts, onEdit, onClose}){
           </div>
           <div style={{textAlign:"center", marginBottom:16}}>
             <div className="tx-d-icon-wrap" style={{background:iconBg}}>
-              {isTransfer ? "🔁" : (cat ? cat.icon : "❓")}
+              {isTransfer ? "🔁" : renderCatIcon(cat?cat.icon:"❓", 32)}
             </div>
             <div style={{fontSize:18, fontWeight:700, marginTop:4}}>
               {isTransfer ? "轉帳" : (cat ? cat.name : "未分類")}
@@ -1424,13 +1487,18 @@ function AddActionSheet({onPick, onClose}){
 
 function CategoryModal({initial, parentId, type, onSave, onClose}){
   const [name, setName] = useState((initial&&initial.name)||"");
-  const [icon, setIcon] = useState((initial&&initial.icon)||"🔖");
+  const [icon, setIcon] = useState((initial&&initial.icon)||(isPhIcon((initial&&initial.icon)||"")?initial.icon:"ph-folder"));
+  const [useEmoji, setUseEmoji] = useState(!isPhIcon((initial&&initial.icon)||"ph-folder"));
+  const [emojiVal, setEmojiVal] = useState(!isPhIcon((initial&&initial.icon)||"") ? ((initial&&initial.icon)||"") : "");
   const [color, setColor] = useState((initial&&initial.color)||PALETTE[Math.floor(Math.random()*PALETTE.length)]);
+
   function submit(){
     if(!name.trim()){ alert("請輸入分類名稱"); return; }
     const c = /^#[0-9A-Fa-f]{6}$/.test(color.trim()) ? color.trim() : (initial&&initial.color) || PALETTE[0];
-    onSave({name:name.trim(), icon: icon||"🔖", type, parentId: parentId||null, color:c});
+    const finalIcon = useEmoji ? (emojiVal||"📁") : icon;
+    onSave({name:name.trim(), icon:finalIcon, type, parentId: parentId||null, color:c});
   }
+
   return (
     <div className="sheet-overlay" onClick={onClose}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
@@ -1441,8 +1509,34 @@ function CategoryModal({initial, parentId, type, onSave, onClose}){
           <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="例如：咖啡" />
         </div>
         <div className="field">
-          <label>圖示 (emoji)</label>
-          <input type="text" value={icon} onChange={e=>setIcon(e.target.value)} placeholder="🔖" />
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <label style={{marginBottom:0}}>圖示</label>
+            <div style={{display:"flex",gap:6}}>
+              <button type="button" onClick={()=>setUseEmoji(false)}
+                style={{padding:"4px 10px",borderRadius:8,border:"1px solid var(--line)",fontSize:12,
+                  background:!useEmoji?"var(--solid)":"var(--field-bg)",
+                  color:!useEmoji?"#fff":"var(--ink-soft)",fontWeight:600}}>Phosphor</button>
+              <button type="button" onClick={()=>setUseEmoji(true)}
+                style={{padding:"4px 10px",borderRadius:8,border:"1px solid var(--line)",fontSize:12,
+                  background:useEmoji?"var(--solid)":"var(--field-bg)",
+                  color:useEmoji?"#fff":"var(--ink-soft)",fontWeight:600}}>Emoji</button>
+            </div>
+          </div>
+          {/* 預覽 */}
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,
+            background:"var(--field-bg)",borderRadius:10,padding:"10px 14px"}}>
+            {useEmoji
+              ? <span style={{fontSize:28}}>{emojiVal||"📁"}</span>
+              : <i className={"ph ph-"+icon.slice(3)} style={{fontSize:28,color:"var(--ink)"}}></i>
+            }
+            <span style={{fontSize:14,color:"var(--ink-soft)"}}>
+              {useEmoji ? "目前使用 Emoji" : icon}
+            </span>
+          </div>
+          {useEmoji
+            ? <input type="text" value={emojiVal} onChange={e=>setEmojiVal(e.target.value)} placeholder="直接貼上 emoji，例如 🍜" />
+            : <PhIconPicker value={icon} onChange={setIcon} />
+          }
         </div>
         <div className="field">
           <label>圖表顏色</label>
@@ -2142,7 +2236,8 @@ function AnalysisTab({categories, transactions, accounts}){
               <tr><th>年月</th><th>增減</th><th>淨資產</th></tr>
             </thead>
             <tbody>
-              {networthSeries[0].values.map((nw,i)=>{
+              {[...networthSeries[0].values].reverse().map((nw,ri)=>{
+                const i = networthSeries[0].values.length - 1 - ri;
                 const chg = i===0 ? 0 : nw - networthSeries[0].values[i-1];
                 return (
                   <tr key={i}>
@@ -2208,7 +2303,7 @@ function CategoryActionSheet({node, onAddChild, onEdit, onDelete, onClose}){
     <div className="sheet-overlay" onClick={onClose}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
         <div className="sheet-handle"></div>
-        <h2>{node.icon} {node.name}</h2>
+        <h2>{renderCatIcon(node.icon,22)} {node.name}</h2>
         <div className="action-list">
           <button className="action-list-item" onClick={()=>{onClose(); onAddChild(node);}}>＋ 新增子分類</button>
           <button className="action-list-item" onClick={()=>{onClose(); onEdit(node);}}>✏️ 編輯</button>
@@ -2227,7 +2322,7 @@ function CategoryNode({node, depth, dragHandlers, onAddChild, onEdit, onDelete, 
       <div className="cat-row">
         <span className="drag-handle" {...dragHandlers}>≡</span>
         <span className="dot" style={{background:node.color}}></span>
-        <span className="name">{node.icon} {node.name}</span>
+        <span className="name">{renderCatIcon(node.icon,20)} {node.name}</span>
         <button className="icon-btn more-btn" onClick={()=>setShowActions(true)}>⋯</button>
       </div>
       {node.children.length>0 &&
