@@ -273,6 +273,27 @@
     display:flex;justify-content:space-between;align-items:center;font-size:13px;}
   .chart-detail .lbl{color:var(--ink-soft);font-weight:600;}
   .chart-hint{font-size:12px;color:var(--ink-soft);text-align:center;margin-top:10px;}
+  .spending-bar{display:flex;height:10px;border-radius:6px;overflow:hidden;gap:2px;margin:10px 0 14px;}
+  .spending-bar-seg{height:100%;border-radius:3px;transition:flex .3s;}
+  .spending-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);}
+  .spending-row:last-child{border-bottom:none;}
+  .spending-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .spending-name{flex:1;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;}
+  .spending-pct{font-size:12px;color:var(--ink-soft);background:var(--field-bg);
+    padding:2px 7px;border-radius:6px;}
+  .spending-amt{font-size:14px;font-weight:700;min-width:60px;text-align:right;}
+  .analysis-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;}
+  .analysis-btns{display:flex;gap:4px;}
+  .analysis-btn{background:var(--field-bg);border:none;border-radius:8px;
+    width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+    font-size:17px;color:var(--ink-soft);cursor:pointer;}
+  .analysis-btn:active{background:var(--line);}
+  .pie-sheet-donut{display:flex;align-items:center;gap:16px;margin:14px 0;}
+  .pie-legend-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line);}
+  .pie-legend-row:last-child{border-bottom:none;}
+  .pie-legend-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+  .pie-legend-name{flex:1;font-size:14px;font-weight:600;}
+  .pie-legend-amt{font-size:14px;font-weight:700;color:var(--ink-soft);}
   .donut-wrap{display:flex;align-items:center;gap:18px;}
   .donut-legend{flex:1;display:flex;flex-direction:column;gap:6px;}
   .legend-row{display:flex;align-items:center;gap:8px;font-size:13px;}
@@ -445,6 +466,57 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const PALETTE = ["#B98C82","#8FA38E","#C9B38B","#94A7B5","#A98C78","#B5949A","#7E9181","#C2A878","#9E8B99","#8FA8A0"];
+
+// 大分類用差異大的10色
+const PARENT_COLORS = [
+  "#E05252", // 紅
+  "#E07C30", // 橙
+  "#C9A830", // 黃
+  "#5AA84A", // 綠
+  "#3A9E8A", // 青
+  "#3A80C2", // 藍
+  "#6B52D0", // 紫
+  "#C252A8", // 桃
+  "#7A6040", // 棕
+  "#5E8080", // 藍灰
+];
+
+function hexToHsl(hex){
+  let r=parseInt(hex.slice(1,3),16)/255,
+      g=parseInt(hex.slice(3,5),16)/255,
+      b=parseInt(hex.slice(5,7),16)/255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b);
+  let h,s,l=(max+min)/2;
+  if(max===min){ h=s=0; }
+  else{
+    const d=max-min; s=l>0.5?d/(2-max-min):d/(max+min);
+    switch(max){ case r: h=(g-b)/d+(g<b?6:0); break; case g: h=(b-r)/d+2; break; case b: h=(r-g)/d+4; break; }
+    h/=6;
+  }
+  return [Math.round(h*360), Math.round(s*100), Math.round(l*100)];
+}
+function hslToHex(h,s,l){
+  s/=100; l/=100;
+  const k=n=>(n+h/30)%12;
+  const a=s*Math.min(l,1-l);
+  const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+  const toHex=x=>Math.round(x*255).toString(16).padStart(2,"0");
+  return "#"+toHex(f(0))+toHex(f(8))+toHex(f(4));
+}
+function childShade(parentHex, sibIndex, sibTotal){
+  const [h,s,l] = hexToHsl(parentHex);
+  // 在父色的亮度上下分散：少的話集中在中間，多的話往兩端散開
+  const n = Math.max(sibTotal, 1);
+  const step = n<=1 ? 0 : 30/(n-1);
+  const newL = Math.max(20, Math.min(75, l - 15 + sibIndex*step));
+  const newS = Math.min(90, s + 10); // 子分類飽和度略高
+  return hslToHex(h, newS, newL);
+}
+function assignParentColor(siblings){
+  // 找還沒被用的父色
+  const usedColors = new Set(siblings.map(c=>c.color));
+  return PARENT_COLORS.find(c=>!usedColors.has(c)) || PARENT_COLORS[siblings.length%PARENT_COLORS.length];
+}
 
 const DEFAULT_CATEGORIES = [
   {name:"薪資", type:"income", icon:"💰"},
@@ -1789,6 +1861,119 @@ function InvestmentModal({initial, onSave, onClose}){
 }
 
 /* ---------- 主分頁 ---------- */
+function SpendingAnalysisCard({categories, monthTx, periodLabel}){
+  const [viewType, setViewType] = useState("expense");
+  const [showPie, setShowPie] = useState(false);
+  const label = periodLabel||"本月";
+
+  const catData = useMemo(()=>{
+    const map = {};
+    monthTx.filter(t=>t.type===viewType).forEach(t=>{
+      if(!map[t.categoryId]) map[t.categoryId]=0;
+      map[t.categoryId] += t.amount;
+    });
+    const total = Object.values(map).reduce((s,v)=>s+v,0);
+    const entries = Object.entries(map).map(([id,val])=>{
+      const cat = catById(categories, id);
+      const rootCat = cat && cat.parentId ? catById(categories, cat.parentId) : cat;
+      return {id, value:val, name:rootCat?rootCat.name:(cat?cat.name:"未分類"), color:rootCat?rootCat.color:(cat?cat.color:"#ccc"), pct:total>0?Math.round(val/total*1000)/10:0};
+    }).sort((a,b)=>b.value-a.value);
+    // 合併成母分類
+    const merged = {};
+    entries.forEach(e=>{
+      if(!merged[e.name]) merged[e.name]={name:e.name,color:e.color,value:0,pct:0};
+      merged[e.name].value += e.value;
+    });
+    const list = Object.values(merged).sort((a,b)=>b.value-a.value);
+    const realTotal = list.reduce((s,e)=>s+e.value,0);
+    list.forEach(e=>{ e.pct = realTotal>0?Math.round(e.value/realTotal*1000)/10:0; });
+    if(list.length>5){
+      const top = list.slice(0,5);
+      const rest = list.slice(5).reduce((s,e)=>s+e.value,0);
+      const restPct = realTotal>0?Math.round(rest/realTotal*1000)/10:0;
+      top.push({name:"其他",color:"#B8AFA2",value:rest,pct:restPct});
+      return top;
+    }
+    return list;
+  }, [monthTx, viewType, categories]);
+
+  const total = catData.reduce((s,e)=>s+e.value,0);
+
+  return (
+    <div className="chart-card">
+      <div className="analysis-header">
+        <h3 style={{margin:0}}>{label}{viewType==="expense"?"支出":"收入"}分析</h3>
+        <div className="analysis-btns">
+          <button className="analysis-btn" title="切換收支"
+            onClick={()=>setViewType(v=>v==="expense"?"income":"expense")}>
+            <i className="ph ph-arrows-left-right"></i>
+          </button>
+          <button className="analysis-btn" title="圓餅圖"
+            onClick={()=>setShowPie(true)}>
+            <i className="ph ph-chart-pie"></i>
+          </button>
+        </div>
+      </div>
+
+      {total===0 ? <div className="empty-hint">這段時間沒有{viewType==="expense"?"支出":"收入"}紀錄</div> :
+        <React.Fragment>
+          {/* 水平堆疊長條 */}
+          <div className="spending-bar">
+            {catData.map((e,i)=>(
+              <div key={i} className="spending-bar-seg"
+                style={{flex:e.value, background:e.color}} />
+            ))}
+          </div>
+          {/* 分類列表 */}
+          {catData.map((e,i)=>(
+            <div className="spending-row" key={i}>
+              <div className="spending-dot" style={{background:e.color}}></div>
+              <div className="spending-name">{e.name}</div>
+              <span className="spending-pct">{e.pct}%</span>
+              <span className="spending-amt">{fmtMoney(e.value)}</span>
+            </div>
+          ))}
+        </React.Fragment>
+      }
+
+      {showPie &&
+        <div className="sheet-overlay" onClick={()=>setShowPie(false)}>
+          <div className="sheet" onClick={e=>e.stopPropagation()}>
+            <div className="sheet-handle"></div>
+            <div className="analysis-header">
+              <h2>{label}{viewType==="expense"?"支出":"收入"}分析</h2>
+              <button className="analysis-btn" onClick={()=>setViewType(v=>v==="expense"?"income":"expense")}>
+                <i className="ph ph-arrows-left-right"></i>
+              </button>
+            </div>
+            {total===0 ? <div className="empty-hint">沒有紀錄</div> :
+              <React.Fragment>
+                <div className="pie-sheet-donut">
+                  <Donut data={catData.map(e=>({...e,id:e.name}))} size={130} />
+                  <div style={{flex:1}}>
+                    {catData.map((e,i)=>(
+                      <div className="pie-legend-row" key={i}>
+                        <div className="pie-legend-dot" style={{background:e.color}}></div>
+                        <span className="pie-legend-name">{e.name}</span>
+                        <span style={{fontSize:12,color:"var(--ink-soft)",marginRight:8}}>{e.pct}%</span>
+                        <span className="pie-legend-amt">{fmtMoney(e.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{textAlign:"center",fontSize:13,color:"var(--ink-soft)",marginTop:8}}>
+                  總計：{fmtMoney(total)}
+                </div>
+              </React.Fragment>
+            }
+            <button className="btn ghost" style={{width:"100%",marginTop:14}} onClick={()=>setShowPie(false)}>關閉</button>
+          </div>
+        </div>
+      }
+    </div>
+  );
+}
+
 function OverviewTab({categories, accounts, monthTx, allTx, periodLabel, onViewTx, onAdd}){
   const label = periodLabel || "本月";
   const [query, setQuery] = useState("");
@@ -1849,6 +2034,7 @@ function OverviewTab({categories, accounts, monthTx, allTx, periodLabel, onViewT
         </React.Fragment>
         :
         <React.Fragment>
+          <SpendingAnalysisCard categories={categories} monthTx={monthTx} periodLabel={label} />
           <div className="section-title">{label}交易</div>
           {dayGroups.length===0 && <div className="empty-hint">這段時間還沒有任何紀錄，點右下角「＋」新增一筆吧</div>}
           {dayGroups.map(g=>
@@ -2315,7 +2501,7 @@ function CategoryNode({node, depth, dragHandlers, onAddChild, onEdit, onDelete, 
   );
 }
 
-function CategoriesSection({categories, onAddCategory, onEditCategory, onDeleteCategory, onReorderCategoryGroup}){
+function CategoriesSection({categories, onAddCategory, onEditCategory, onDeleteCategory, onReorderCategoryGroup, onRecolorAll}){
   const [catModal, setCatModal] = useState(null); // {mode:'add'|'edit', type, parentId, initial}
 
   const expenseTree = buildTree(categories.filter(c=>c.type==="expense"));
@@ -2329,6 +2515,12 @@ function CategoriesSection({categories, onAddCategory, onEditCategory, onDeleteC
 
   return (
     <div>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+        <button className="btn ghost" style={{fontSize:12,padding:"6px 12px"}}
+          onClick={()=>{ if(confirm("將所有現有分類重新套用自動配色（大分類各取不同色、子分類取父色深淺）？")) onRecolorAll(); }}>
+          🎨 自動重新配色
+        </button>
+      </div>
       <div className="cat-section">
         <div className="cat-section-title">
           <h3>支出分類</h3>
@@ -2629,7 +2821,7 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
 }
 
 function SettingsTab({categories, accounts, transactions, investments, onViewTx,
-  onAddCategory, onEditCategory, onDeleteCategory, onReorderCategoryGroup,
+  onAddCategory, onEditCategory, onDeleteCategory, onReorderCategoryGroup, onRecolorAll,
   onAddAccount, onEditAccount, onDeleteAccount, onReorderGroup,
   onAddInvestment, onEditInvestment, onDeleteInvestment}){
   const [mode, setMode] = useState("account");
@@ -2681,7 +2873,7 @@ function SettingsTab({categories, accounts, transactions, investments, onViewTx,
       {mode==="category" &&
         <CategoriesSection categories={categories}
           onAddCategory={onAddCategory} onEditCategory={onEditCategory} onDeleteCategory={onDeleteCategory}
-          onReorderCategoryGroup={onReorderCategoryGroup} />
+          onReorderCategoryGroup={onReorderCategoryGroup} onRecolorAll={onRecolorAll} />
       }
       {mode==="account" &&
         <AccountsSection accounts={accounts} transactions={transactions} categories={categories} onViewTx={onViewTx}
@@ -2866,7 +3058,20 @@ function App(){
   async function addCategory(data){
     const siblings = categories.filter(c=>c.type===data.type && (c.parentId||null)===(data.parentId||null));
     const maxOrder = siblings.reduce((m,c)=>Math.max(m, c.order||0), -1);
-    await addDoc(collection(db,"categories"), {...data, order:maxOrder+1});
+    let color = data.color;
+    if(!data.parentId){
+      // 大分類：從 PARENT_COLORS 取一個還沒被用的
+      const parentSibs = categories.filter(c=>c.type===data.type && !c.parentId);
+      color = assignParentColor(parentSibs);
+    } else {
+      // 子分類：從父分類色相衍生
+      const parent = categories.find(c=>c.id===data.parentId);
+      if(parent && parent.color){
+        const allChildren = categories.filter(c=>c.parentId===data.parentId);
+        color = childShade(parent.color, allChildren.length, allChildren.length+1);
+      }
+    }
+    await addDoc(collection(db,"categories"), {...data, color, order:maxOrder+1});
   }
   async function reorderCategoryGroup(newList){
     const batch = writeBatch(db);
@@ -2874,6 +3079,27 @@ function App(){
     await batch.commit();
   }
   async function editCategory(id, data){ await updateDoc(doc(db,"categories",id), data); }
+  async function recolorAll(){
+    try{
+      const batch = writeBatch(db);
+      ["expense","income"].forEach(type=>{
+        const roots = categories.filter(c=>c.type===type && !c.parentId)
+          .sort((a,b)=>(a.order||0)-(b.order||0));
+        roots.forEach((root, ri)=>{
+          const parentColor = PARENT_COLORS[ri % PARENT_COLORS.length];
+          batch.update(doc(db,"categories",root.id), {color: parentColor});
+          const children = categories.filter(c=>c.parentId===root.id)
+            .sort((a,b)=>(a.order||0)-(b.order||0));
+          const total = children.length;
+          children.forEach((child, ci)=>{
+            batch.update(doc(db,"categories",child.id), {color: childShade(parentColor, ci, total)});
+          });
+        });
+      });
+      await batch.commit();
+      flash("配色已更新");
+    }catch(e){ alert("更新失敗："+e.message); }
+  }
   async function deleteCategory(id){
     await deleteDoc(doc(db,"categories",id));
     const b = budgets.find(b=>b.categoryId===id);
@@ -2955,7 +3181,7 @@ function App(){
           <AnalysisTab categories={categories} transactions={transactions} accounts={accounts} />
         }
         {tab==="settings" &&
-          <SettingsTab categories={categories} accounts={accounts} transactions={transactions} investments={investments} onViewTx={openViewTx}
+          <SettingsTab categories={categories} accounts={accounts} transactions={transactions} investments={investments} onViewTx={openViewTx} onRecolorAll={recolorAll}
             onAddCategory={addCategory} onEditCategory={editCategory} onDeleteCategory={deleteCategory}
             onReorderCategoryGroup={reorderCategoryGroup}
             onAddAccount={addAccount} onEditAccount={editAccount} onDeleteAccount={deleteAccount}
