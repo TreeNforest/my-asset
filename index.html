@@ -342,6 +342,15 @@
   .acc-detail-stats .stat b{font-size:14px;}
   .acc-detail-stats .stat b.pos{color:var(--income);}
   .acc-detail-stats .stat b.neg{color:var(--expense);}
+  .nw-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:12px;}
+  .nw-table th{text-align:left;color:var(--ink-soft);font-weight:600;padding:8px 4px;
+    border-bottom:2px solid var(--line);}
+  .nw-table th:not(:first-child){text-align:right;}
+  .nw-table td{padding:10px 4px;border-bottom:1px solid var(--line);}
+  .nw-table td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums;}
+  .nw-table .chg-pos{color:var(--income);}
+  .nw-table .chg-neg{color:var(--expense);}
+  .nw-table .chg-zero{color:var(--ink-soft);}
   .acc-detail-year-row{display:flex;justify-content:flex-end;margin-bottom:10px;}
   .acc-detail-year-row select{border:1px solid var(--line);border-radius:8px;padding:6px 8px;
     font-size:13px;background:var(--field-bg);color:var(--ink);}
@@ -2128,18 +2137,25 @@ function AnalysisTab({categories, transactions, accounts}){
               </span>
             </div>
           </div>
-          <div className="acc-detail-stats">
-            {accounts.filter(a=>!isLiability(a.type)&&!isExcluded(a)).length>0 &&
-              <div className="stat"><span>總資產</span>
-                <b>{fmtMoney(accounts.filter(a=>!isLiability(a.type)&&!isExcluded(a)).reduce((s,a)=>s+accountBalance(a,transactions),0))}</b>
-              </div>
-            }
-            {accounts.filter(a=>isLiability(a.type)&&!isExcluded(a)).length>0 &&
-              <div className="stat"><span>總負債</span>
-                <b className="neg">{fmtMoney(accounts.filter(a=>isLiability(a.type)&&!isExcluded(a)).reduce((s,a)=>s+Math.max(0,accountBalance(a,transactions)),0))}</b>
-              </div>
-            }
-          </div>
+          <table className="nw-table">
+            <thead>
+              <tr><th>年月</th><th>增減</th><th>淨資產</th></tr>
+            </thead>
+            <tbody>
+              {networthSeries[0].values.map((nw,i)=>{
+                const chg = i===0 ? 0 : nw - networthSeries[0].values[i-1];
+                return (
+                  <tr key={i}>
+                    <td>{networthSeries[0].labels[i]}</td>
+                    <td className={chg>0?"chg-pos":chg<0?"chg-neg":"chg-zero"}>
+                      {chg>0?"+":""}{chg===0?"0":fmtMoney(chg)}
+                    </td>
+                    <td style={{fontWeight:600}}>{fmtMoney(nw)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </React.Fragment>
       }
 
@@ -2152,10 +2168,6 @@ function AnalysisTab({categories, transactions, accounts}){
               <span><span style={{color:"var(--income)"}}>●</span> 收入</span>
               <span><span style={{color:"var(--expense)"}}>●</span> 支出</span>
             </div>
-          </div>
-          <div className="acc-detail-stats">
-            <div className="stat"><span>本月收入</span><b className="pos">{fmtMoney(lastIncome)}</b></div>
-            <div className="stat"><span>本月支出</span><b className="neg">{fmtMoney(lastExpense)}</b></div>
           </div>
         </React.Fragment>
       }
