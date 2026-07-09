@@ -70,7 +70,7 @@
   @font-face{font-family:'CreamFont';src:url('./creamfont-3.3.otf') format('opentype');font-display:swap;font-style:normal;font-weight:normal;}
   html,body{margin:0;padding:0;background-color:var(--bg);color:var(--ink);
     font-family:'CreamFont',-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
-    font-style:normal;
+    font-style:normal;font-weight:400;
     -webkit-font-smoothing:antialiased;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cellipse cx='18' cy='22' rx='9' ry='4' fill='%234A7C3F' opacity='0.07' transform='rotate(-35 18 22)'/%3E%3Cline x1='18' y1='26' x2='18' y2='18' stroke='%234A7C3F' stroke-width='0.7' opacity='0.07' transform='rotate(-35 18 22)'/%3E%3Cellipse cx='75' cy='55' rx='11' ry='4.5' fill='%233A6430' opacity='0.06' transform='rotate(20 75 55)'/%3E%3Cline x1='75' y1='59' x2='75' y2='51' stroke='%233A6430' stroke-width='0.7' opacity='0.06' transform='rotate(20 75 55)'/%3E%3Cellipse cx='40' cy='90' rx='8' ry='3.5' fill='%234A7C3F' opacity='0.065' transform='rotate(-10 40 90)'/%3E%3Cline x1='40' y1='93' x2='40' y2='87' stroke='%234A7C3F' stroke-width='0.7' opacity='0.065' transform='rotate(-10 40 90)'/%3E%3Cellipse cx='100' cy='15' rx='6' ry='2.5' fill='%235A8A4A' opacity='0.055' transform='rotate(50 100 15)'/%3E%3Cellipse cx='8' cy='75' rx='5' ry='2.2' fill='%234A7C3F' opacity='0.05' transform='rotate(-60 8 75)'/%3E%3Cpath d='M95 80 Q100 70 108 65' stroke='%234A7C3F' stroke-width='0.6' fill='none' opacity='0.05'/%3E%3Cpath d='M108 65 Q112 58 118 55' stroke='%234A7C3F' stroke-width='0.6' fill='none' opacity='0.05'/%3E%3Cellipse cx='104' cy='70' rx='4' ry='1.8' fill='%234A7C3F' opacity='0.055' transform='rotate(40 104 70)'/%3E%3Cellipse cx='115' cy='58' rx='4' ry='1.8' fill='%234A7C3F' opacity='0.055' transform='rotate(30 115 58)'/%3E%3C/svg%3E");
     background-size:120px 120px;
@@ -87,7 +87,7 @@
 
   .header{position:sticky;top:0;z-index:10;background:var(--bg);padding:18px 18px 8px;
     display:flex;align-items:center;justify-content:space-between;}
-  .header h1{margin:0;font-size:21px;letter-spacing:.06em;font-weight:600;}
+  .header h1{margin:0;font-size:21px;letter-spacing:.06em;font-weight:700;}
   .theme-toggle{background:var(--surface);border:1px solid var(--line);border-radius:50%;
     width:36px;height:36px;font-size:20px;flex-shrink:0;box-shadow:0 1px 3px rgba(60,50,40,.06);
     display:flex;align-items:center;justify-content:center;color:var(--ink-soft);line-height:1;}
@@ -125,7 +125,7 @@
   .summary-card.income .value{color:var(--income);}
   .summary-card.expense .value{color:var(--expense);}
 
-  .section-title{font-size:14px;color:var(--ink-soft);margin:18px 0 8px;font-weight:600;
+  .section-title{font-size:14px;color:var(--ink-soft);margin:18px 0 8px;font-weight:400;
     display:flex;align-items:center;justify-content:space-between;}
   .section-title a{font-size:13px;color:var(--accent);font-weight:500;}
 
@@ -163,18 +163,18 @@
   .action-btn.fixed .ic{background:#D97706;}
   .empty-hint{text-align:center;color:var(--ink-soft);font-size:14px;padding:30px 0;}
   .search-bar-wrap{position:relative;margin-bottom:14px;}
-  .search-bar-wrap input{width:100%;padding:10px 36px 10px 36px;border:1px solid var(--line);
+  .search-bar-wrap input{width:100%;padding:7px 36px 7px 36px;border:1px solid var(--line);
     border-radius:10px;background:var(--field-bg);color:var(--ink);font-size:14px;}
   .search-bar-wrap .search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);
     font-size:15px;color:var(--ink-soft);pointer-events:none;}
   .search-bar-wrap .search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);
     background:none;border:none;font-size:15px;color:var(--ink-soft);padding:4px;}
-  .day-group-header{font-size:13px;color:var(--ink-soft);font-weight:600;margin:14px 0 6px;}
+  .day-group-header{font-size:13px;color:var(--ink-soft);font-weight:400;margin:14px 0 6px;}
 
   .bottom-nav{position:fixed;left:0;right:0;bottom:0;background:var(--surface);
     display:flex;border-top:1px solid var(--line);padding:6px 0 max(6px,env(safe-area-inset-bottom));z-index:20;}
   .bottom-nav button{flex:1;background:none;border:none;display:flex;flex-direction:column;
-    align-items:center;gap:2px;padding:6px 0;color:var(--ink-soft);font-size:12px;}
+    align-items:center;gap:2px;padding:6px 0;color:var(--ink-soft);font-size:12px;font-weight:400;}
   .bottom-nav button .ic{font-size:24px;line-height:1;}
   .bottom-nav button.active{color:var(--solid);font-weight:600;}
   .bottom-nav button.active .ic i{color:var(--solid);}
@@ -359,6 +359,14 @@
   .sfp-subcat-pct{font-size:12px;color:var(--ink-soft);width:46px;text-align:right;flex-shrink:0;}
   .sfp-subcat-amt{font-size:14px;font-weight:600;width:72px;text-align:right;flex-shrink:0;}
   .sfp-expand-arrow{font-size:11px;color:var(--ink-soft);margin-left:4px;flex-shrink:0;transition:transform .2s;}
+  .hbar-section{padding:4px 0;}
+  .hbar-row{display:flex;align-items:center;gap:8px;padding:7px 0;}
+  .hbar-name{font-size:14px;font-weight:500;min-width:72px;max-width:80px;flex-shrink:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .hbar-track{flex:1;height:12px;background:var(--field-bg);border-radius:6px;overflow:hidden;}
+  .hbar-fill{height:100%;border-radius:6px;transition:width .3s;}
+  .hbar-pct{font-size:12px;color:var(--ink-soft);min-width:42px;text-align:right;flex-shrink:0;}
+  .hbar-amt{font-size:13px;font-weight:600;min-width:54px;text-align:right;flex-shrink:0;}
   .sfp-expand-arrow.open{transform:rotate(90deg);}
   .donut-wrap{display:flex;align-items:center;gap:18px;}
   .donut-legend{flex:1;display:flex;flex-direction:column;gap:6px;}
@@ -428,7 +436,7 @@
   .acc-icon.card-shape{width:46px;height:30px;border-radius:5px;}
   .acc-row .name{flex:1;font-size:14px;font-weight:600;min-width:0;}
   .acc-name-wrap{flex:1;min-width:0;display:flex;flex-direction:column;}
-  .acc-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .acc-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400;}
   .acc-row .bal{font-size:13px;color:var(--ink-soft);white-space:nowrap;}
   .acc-detail-balance{text-align:center;padding:6px 0 14px;}
   .acc-detail-balance .nw-value{font-size:26px;font-weight:700;margin-top:4px;}
@@ -2013,51 +2021,59 @@ function StatsFullPage({categories, accounts, allMonthTx, defaultViewType, onClo
         ))}
       </div>
 
-      {/* 圓餅圖 */}
+      {/* 圓環 or 橫條圖 */}
       <div className="sfp-section">
         {catData.length===0
           ? <div className="empty-hint">沒有{viewType==="expense"?"支出":"收入"}紀錄</div>
-          : <React.Fragment>
+          : selectedCat && subCatData.length>0
+            ?
+            <React.Fragment>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <span style={{fontSize:16,fontWeight:600}}>{selectedCat}</span>
+                <button onClick={()=>setSelectedCat(null)}
+                  style={{background:"none",border:"none",color:"var(--accent)",fontSize:13,fontWeight:600,padding:"2px 6px"}}>
+                  ← 全部分類
+                </button>
+              </div>
+              <div className="hbar-section">
+                {subCatData.map((s,i)=>(
+                  <div className="hbar-row" key={i}>
+                    <span className="hbar-name">{s.name}</span>
+                    <div className="hbar-track">
+                      <div className="hbar-fill" style={{width:s.pct+"%",background:s.color}}></div>
+                    </div>
+                    <span className="hbar-pct">{s.pct}%</span>
+                    <span className="hbar-amt">{fmtMoney(s.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </React.Fragment>
+            :
+            <React.Fragment>
               <div className="sfp-donut-section">
-                <Donut
-                  data={(selectedCat && subCatData.length>0 ? subCatData : catData).map(e=>({...e,id:e.name}))}
-                  size={180} />
+                <Donut data={catData.map(e=>({...e,id:e.name}))} size={180} />
                 <div style={{textAlign:"center",fontSize:12,color:"var(--ink-soft)",marginTop:6}}>
-                  {selectedCat
-                    ? <span>
-                        <span style={{cursor:"pointer",color:"var(--accent)"}} onClick={()=>setSelectedCat(null)}>← 全部</span>
-                        　{selectedCat}
-                      </span>
-                    : <span>總計 {fmtMoney(catData.reduce((s,e)=>s+e.value,0))}</span>
-                  }
+                  總計 {fmtMoney(catData.reduce((s,e)=>s+e.value,0))}
                 </div>
               </div>
               <div className="sfp-cat-list">
                 {catData.map((e,i)=>{
-                  const hasChildren = categories.some(c=>c.parentId && (c.type===viewType) && (() => {
-                    const root = catById(categories, c.parentId);
-                    return root && root.name === e.name;
+                  const hasChildren = categories.some(c=>c.parentId && c.type===viewType && (()=>{
+                    const root = catById(categories,c.parentId);
+                    return root && root.name===e.name;
                   })());
                   const isSelected = selectedCat===e.name;
                   return (
                     <React.Fragment key={i}>
                       <div
                         className={"sfp-cat-row"+(hasChildren?" clickable":"")+(isSelected?" selected":"")}
-                        onClick={hasChildren ? ()=>setSelectedCat(isSelected?null:e.name) : undefined}>
+                        onClick={hasChildren?()=>setSelectedCat(isSelected?null:e.name):undefined}>
                         <div className="sfp-cat-dot" style={{background:e.color}}></div>
                         <span className="sfp-cat-name">{e.name}</span>
                         <span className="sfp-cat-pct">{e.pct}%</span>
                         <span className="sfp-cat-amt">{fmtMoney(e.value)}</span>
                         {hasChildren && <span className={"sfp-expand-arrow"+(isSelected?" open":"")}>▶</span>}
                       </div>
-                      {isSelected && subCatData.map((s,j)=>(
-                        <div className="sfp-subcat-row" key={j}>
-                          <div className="sfp-subcat-dot" style={{background:s.color}}></div>
-                          <span className="sfp-subcat-name">{s.name}</span>
-                          <span className="sfp-subcat-pct">{s.pct}%</span>
-                          <span className="sfp-subcat-amt">{fmtMoney(s.value)}</span>
-                        </div>
-                      ))}
                     </React.Fragment>
                   );
                 })}
