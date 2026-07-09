@@ -164,8 +164,12 @@
     display:flex;border-top:1px solid var(--line);padding:6px 0 max(6px,env(safe-area-inset-bottom));z-index:20;}
   .bottom-nav button{flex:1;background:none;border:none;display:flex;flex-direction:column;
     align-items:center;gap:2px;padding:6px 0;color:var(--ink-soft);font-size:12px;}
-  .bottom-nav button .ic{font-size:20px;}
-  .bottom-nav button.active{color:var(--expense);font-weight:600;}
+  .bottom-nav button .ic{font-size:24px;line-height:1;}
+  .bottom-nav button.active{color:var(--solid);font-weight:600;}
+  .bottom-nav button.active .ic i{color:var(--solid);}
+  .bottom-nav button .ic i{color:var(--ink-soft);}
+  .bottom-nav button .ic i.ph-duotone::before{opacity:1;}
+  .bottom-nav button.active .ic i.ph-duotone::after{opacity:0.3;}
 
   .fab{position:fixed;right:18px;bottom:78px;width:54px;height:54px;border-radius:50%;
     background:var(--expense);color:#fff;border:none;font-size:27px;box-shadow:0 4px 10px rgba(60,50,40,.25);
@@ -1042,15 +1046,17 @@ function DragList({items, onReorder, renderRow}){
 
 function BottomNav({tab, setTab}){
   const items=[
-    {key:"home", icon:"🏠", label:"首頁"},
-    {key:"analysis", icon:"📊", label:"分析"},
-    {key:"settings", icon:"🗂", label:"管理"},
+    {key:"home",     phIcon:"ph-house",      label:"首頁"},
+    {key:"analysis", phIcon:"ph-chart-bar",  label:"分析"},
+    {key:"settings", phIcon:"ph-gear",       label:"管理"},
   ];
   return (
     <div className="bottom-nav">
       {items.map(it=>(
         <button key={it.key} className={tab===it.key?"active":""} onClick={()=>setTab(it.key)}>
-          <span className="ic">{it.icon}</span>
+          <span className="ic">
+            <i className={"ph-duotone "+it.phIcon}></i>
+          </span>
           <span>{it.label}</span>
         </button>
       ))}
