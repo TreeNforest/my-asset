@@ -303,12 +303,24 @@
     width:32px;height:32px;display:flex;align-items:center;justify-content:center;
     font-size:17px;color:var(--ink-soft);cursor:pointer;}
   .analysis-btn:active{background:var(--line);}
-  .pie-sheet-donut{display:flex;align-items:center;gap:16px;margin:14px 0;}
-  .pie-legend-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line);}
+  .pie-sheet-donut{display:flex;align-items:flex-start;gap:16px;margin:14px 0;}
+  .pie-legend-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);}
   .pie-legend-row:last-child{border-bottom:none;}
   .pie-legend-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
   .pie-legend-name{flex:1;font-size:14px;font-weight:600;}
-  .pie-legend-amt{font-size:14px;font-weight:700;color:var(--ink-soft);}
+  .pie-legend-pct{font-size:12px;color:var(--ink-soft);width:42px;text-align:right;flex-shrink:0;}
+  .pie-legend-amt{font-size:14px;font-weight:700;width:60px;text-align:right;flex-shrink:0;}
+  .stats-section{margin-top:16px;}
+  .stats-section h3{font-size:14px;color:var(--ink-soft);margin:0 0 8px;font-weight:600;}
+  .stats-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .stats-table th{color:var(--ink-soft);font-weight:600;padding:6px 4px;border-bottom:1px solid var(--line);text-align:right;}
+  .stats-table th:first-child{text-align:left;}
+  .stats-table td{padding:10px 4px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums;}
+  .stats-table td:first-child{text-align:left;font-weight:600;}
+  .stats-table tr:last-child td{border-bottom:none;}
+  .stats-table .acc-icon-sm{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+    background:var(--field-bg);font-size:12px;margin-right:5px;flex-shrink:0;overflow:hidden;vertical-align:middle;}
+  .stats-table .acc-icon-sm img{width:100%;height:100%;object-fit:cover;}
   .donut-wrap{display:flex;align-items:center;gap:18px;}
   .donut-legend{flex:1;display:flex;flex-direction:column;gap:6px;}
   .legend-row{display:flex;align-items:center;gap:8px;font-size:13px;}
@@ -1854,7 +1866,7 @@ function InvestmentModal({initial, onSave, onClose}){
 }
 
 /* ---------- 主分頁 ---------- */
-function SpendingAnalysisCard({categories, monthTx, periodLabel}){
+function SpendingAnalysisCard({categories, accounts, monthTx, periodLabel}){
   const [viewType, setViewType] = useState("expense");
   const [showPie, setShowPie] = useState(false);
   const label = periodLabel||"本月";
@@ -1865,16 +1877,14 @@ function SpendingAnalysisCard({categories, monthTx, periodLabel}){
       if(!map[t.categoryId]) map[t.categoryId]=0;
       map[t.categoryId] += t.amount;
     });
-    const total = Object.values(map).reduce((s,v)=>s+v,0);
     const entries = Object.entries(map).map(([id,val])=>{
       const cat = catById(categories, id);
       const rootCat = cat && cat.parentId ? catById(categories, cat.parentId) : cat;
-      return {id, value:val, name:rootCat?rootCat.name:(cat?cat.name:"未分類"), color:rootCat?rootCat.color:(cat?cat.color:"#ccc"), pct:total>0?Math.round(val/total*1000)/10:0};
+      return {id, value:val, name:rootCat?rootCat.name:(cat?cat.name:"未分類"), color:rootCat?rootCat.color:(cat?cat.color:"#ccc")};
     }).sort((a,b)=>b.value-a.value);
-    // 合併成母分類
     const merged = {};
     entries.forEach(e=>{
-      if(!merged[e.name]) merged[e.name]={name:e.name,color:e.color,value:0,pct:0};
+      if(!merged[e.name]) merged[e.name]={name:e.name,color:e.color,value:0};
       merged[e.name].value += e.value;
     });
     const list = Object.values(merged).sort((a,b)=>b.value-a.value);
@@ -1883,8 +1893,7 @@ function SpendingAnalysisCard({categories, monthTx, periodLabel}){
     if(list.length>5){
       const top = list.slice(0,5);
       const rest = list.slice(5).reduce((s,e)=>s+e.value,0);
-      const restPct = realTotal>0?Math.round(rest/realTotal*1000)/10:0;
-      top.push({name:"其他",color:"#B8AFA2",value:rest,pct:restPct});
+      top.push({name:"其他",color:"#B8AFA2",value:rest,pct:realTotal>0?Math.round(rest/realTotal*1000)/10:0});
       return top;
     }
     return list;
@@ -1892,17 +1901,28 @@ function SpendingAnalysisCard({categories, monthTx, periodLabel}){
 
   const total = catData.reduce((s,e)=>s+e.value,0);
 
+  // 帳戶統計（不含轉帳）
+  const accStats = useMemo(()=>{
+    return accounts.filter(a=>!isExcluded(a)).map(acc=>{
+      const tx = monthTx.filter(t=>t.accountId===acc.id);
+      const income = tx.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
+      const expense = tx.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+      return {acc, income, expense, balance: income-expense};
+    }).filter(r=>r.income>0||r.expense>0);
+  }, [monthTx, accounts]);
+
+  const totalIncome = monthTx.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
+  const totalExpense = monthTx.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+
   return (
     <div className="chart-card">
       <div className="analysis-header">
         <h3 style={{margin:0}}>{label}{viewType==="expense"?"支出":"收入"}分析</h3>
         <div className="analysis-btns">
-          <button className="analysis-btn" title="切換收支"
-            onClick={()=>setViewType(v=>v==="expense"?"income":"expense")}>
+          <button className="analysis-btn" onClick={()=>setViewType(v=>v==="expense"?"income":"expense")}>
             <i className="ph ph-arrows-left-right"></i>
           </button>
-          <button className="analysis-btn" title="圓餅圖"
-            onClick={()=>setShowPie(true)}>
+          <button className="analysis-btn" onClick={()=>setShowPie(true)}>
             <i className="ph ph-chart-pie"></i>
           </button>
         </div>
@@ -1910,14 +1930,11 @@ function SpendingAnalysisCard({categories, monthTx, periodLabel}){
 
       {total===0 ? <div className="empty-hint">這段時間沒有{viewType==="expense"?"支出":"收入"}紀錄</div> :
         <React.Fragment>
-          {/* 水平堆疊長條 */}
           <div className="spending-bar">
             {catData.map((e,i)=>(
-              <div key={i} className="spending-bar-seg"
-                style={{flex:e.value, background:e.color}} />
+              <div key={i} className="spending-bar-seg" style={{flex:e.value, background:e.color}} />
             ))}
           </div>
-          {/* 分類列表 */}
           {catData.map((e,i)=>(
             <div className="spending-row" key={i}>
               <div className="spending-dot" style={{background:e.color}}></div>
@@ -1930,36 +1947,84 @@ function SpendingAnalysisCard({categories, monthTx, periodLabel}){
       }
 
       {showPie &&
-        <div className="sheet-overlay" onClick={()=>setShowPie(false)}>
-          <div className="sheet" onClick={e=>e.stopPropagation()}>
-            <div className="sheet-handle"></div>
-            <div className="analysis-header">
-              <h2>{label}{viewType==="expense"?"支出":"收入"}分析</h2>
+        <div className="tx-detail-overlay" onClick={()=>setShowPie(false)}>
+          <div className="tx-detail-card" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:4}}>
+              <button className="detail-close-x" onClick={()=>setShowPie(false)}>✕</button>
+            </div>
+            <div className="analysis-header" style={{marginBottom:12}}>
+              <h2 style={{margin:0}}>{label}統計</h2>
               <button className="analysis-btn" onClick={()=>setViewType(v=>v==="expense"?"income":"expense")}>
                 <i className="ph ph-arrows-left-right"></i>
               </button>
             </div>
-            {total===0 ? <div className="empty-hint">沒有紀錄</div> :
+
+            {/* 圓餅圖 */}
+            {total>0 &&
               <React.Fragment>
                 <div className="pie-sheet-donut">
-                  <Donut data={catData.map(e=>({...e,id:e.name}))} size={130} />
+                  <Donut data={catData.map(e=>({...e,id:e.name}))} size={120} />
                   <div style={{flex:1}}>
                     {catData.map((e,i)=>(
                       <div className="pie-legend-row" key={i}>
                         <div className="pie-legend-dot" style={{background:e.color}}></div>
                         <span className="pie-legend-name">{e.name}</span>
-                        <span style={{fontSize:12,color:"var(--ink-soft)",marginRight:8}}>{e.pct}%</span>
+                        <span className="pie-legend-pct">{e.pct}%</span>
                         <span className="pie-legend-amt">{fmtMoney(e.value)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
-                <div style={{textAlign:"center",fontSize:13,color:"var(--ink-soft)",marginTop:8}}>
+                <div style={{textAlign:"center",fontSize:13,color:"var(--ink-soft)",marginBottom:16}}>
                   總計：{fmtMoney(total)}
                 </div>
               </React.Fragment>
             }
-            <button className="btn ghost" style={{width:"100%",marginTop:14}} onClick={()=>setShowPie(false)}>關閉</button>
+
+            {/* 總計表 */}
+            <div className="stats-section">
+              <h3>總覽</h3>
+              <table className="stats-table">
+                <thead>
+                  <tr><th>筆數</th><th>收入</th><th>支出</th><th>結餘</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>{monthTx.filter(t=>t.type!=="transfer").length}</td>
+                    <td style={{color:"var(--income)"}}>{fmtMoney(totalIncome)}</td>
+                    <td style={{color:"var(--expense)"}}>{fmtMoney(totalExpense)}</td>
+                    <td style={{fontWeight:700}}>{fmtMoney(totalIncome-totalExpense)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* 帳戶明細 */}
+            {accStats.length>0 &&
+              <div className="stats-section">
+                <h3>帳戶（不含轉帳）</h3>
+                <table className="stats-table">
+                  <thead>
+                    <tr><th>名稱</th><th>收入</th><th>支出</th><th>結餘</th></tr>
+                  </thead>
+                  <tbody>
+                    {accStats.map(({acc,income,expense,balance})=>(
+                      <tr key={acc.id}>
+                        <td>
+                          <span className="acc-icon-sm">
+                            {acc.iconImage ? <img src={acc.iconImage} alt="" /> : (acc.icon||"💰")}
+                          </span>
+                          {acc.name.length>4 ? acc.name.slice(0,4)+"…" : acc.name}
+                        </td>
+                        <td style={{color:"var(--income)"}}>{income>0?fmtMoney(income):"—"}</td>
+                        <td style={{color:"var(--expense)"}}>{expense>0?fmtMoney(expense):"—"}</td>
+                        <td style={{fontWeight:700,color:balance>=0?"var(--income)":"var(--expense)"}}>{fmtMoney(balance)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            }
           </div>
         </div>
       }
@@ -2027,7 +2092,7 @@ function OverviewTab({categories, accounts, monthTx, allTx, periodLabel, onViewT
         </React.Fragment>
         :
         <React.Fragment>
-          <SpendingAnalysisCard categories={categories} monthTx={monthTx} periodLabel={label} />
+          <SpendingAnalysisCard categories={categories} accounts={accounts} monthTx={monthTx} periodLabel={label} />
           <div className="section-title">{label}交易</div>
           {dayGroups.length===0 && <div className="empty-hint">這段時間還沒有任何紀錄，點右下角「＋」新增一筆吧</div>}
           {dayGroups.map(g=>
