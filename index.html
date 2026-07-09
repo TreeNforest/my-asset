@@ -349,6 +349,17 @@
   .sfp-stat-row .s{flex:1;background:var(--field-bg);border-radius:10px;padding:10px;text-align:center;}
   .sfp-stat-row .s span{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:4px;}
   .sfp-stat-row .s b{font-size:14px;font-weight:700;}
+  .sfp-cat-row.selected{background:var(--field-bg);border-radius:8px;margin:0 -6px;padding-left:6px;padding-right:6px;}
+  .sfp-cat-row.clickable{cursor:pointer;}
+  .sfp-cat-row.clickable:active{opacity:0.7;}
+  .sfp-subcat-row{display:flex;align-items:center;gap:10px;padding:8px 0 8px 22px;border-bottom:1px dashed var(--line);background:var(--field-bg);}
+  .sfp-subcat-row:last-child{border-bottom:none;}
+  .sfp-subcat-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .sfp-subcat-name{flex:1;font-size:14px;color:var(--ink-soft);}
+  .sfp-subcat-pct{font-size:12px;color:var(--ink-soft);width:46px;text-align:right;flex-shrink:0;}
+  .sfp-subcat-amt{font-size:14px;font-weight:600;width:72px;text-align:right;flex-shrink:0;}
+  .sfp-expand-arrow{font-size:11px;color:var(--ink-soft);margin-left:4px;flex-shrink:0;transition:transform .2s;}
+  .sfp-expand-arrow.open{transform:rotate(90deg);}
   .donut-wrap{display:flex;align-items:center;gap:18px;}
   .donut-legend{flex:1;display:flex;flex-direction:column;gap:6px;}
   .legend-row{display:flex;align-items:center;gap:8px;font-size:13px;}
@@ -1900,6 +1911,7 @@ function StatsFullPage({categories, accounts, allMonthTx, defaultViewType, onClo
   const [customStart, setCustomStart] = useState(()=>{const d=new Date();d.setDate(1);return toDateStr(d);});
   const [customEnd, setCustomEnd] = useState(()=>toDateStr(new Date()));
   const [viewType, setViewType] = useState(defaultViewType||"expense");
+  const [selectedCat, setSelectedCat] = useState(null);
 
   // 用 allMonthTx 是從 App 傳入的，但這裡要獨立篩選所有交易
   // 注意：allMonthTx只是本月資料，我們需要從父層拿全部transactions
@@ -1940,6 +1952,27 @@ function StatsFullPage({categories, accounts, allMonthTx, defaultViewType, onClo
       return {acc,income,expense,balance:income-expense};
     }).filter(r=>r.income>0||r.expense>0);
   }, [tx, accounts]);
+
+  // 選中的大分類 → 計算子分類資料
+  const subCatData = useMemo(()=>{
+    if(!selectedCat) return [];
+    const map = {};
+    tx.filter(t=>t.type===viewType).forEach(t=>{
+      const cat = catById(categories, t.categoryId);
+      if(!cat) return;
+      const root = cat.parentId ? catById(categories, cat.parentId) : cat;
+      const rootName = root ? root.name : cat.name;
+      if(rootName !== selectedCat) return;
+      const subName = cat.parentId ? cat.name : "(未細分)";
+      const subColor = cat.color || root.color || "#ccc";
+      if(!map[subName]) map[subName]={name:subName, color:subColor, value:0};
+      map[subName].value += t.amount;
+    });
+    const list = Object.values(map).sort((a,b)=>b.value-a.value);
+    const total = list.reduce((s,e)=>s+e.value,0);
+    list.forEach(e=>{e.pct=total>0?Math.round(e.value/total*1000)/10:0;});
+    return list;
+  }, [selectedCat, tx, viewType, categories]);
 
   function prevMonth(){setCursorMonth(d=>{const n=new Date(d);n.setMonth(n.getMonth()-1);return n;});}
   function nextMonth(){setCursorMonth(d=>{const n=new Date(d);n.setMonth(n.getMonth()+1);return n;});}
@@ -1986,20 +2019,48 @@ function StatsFullPage({categories, accounts, allMonthTx, defaultViewType, onClo
           ? <div className="empty-hint">沒有{viewType==="expense"?"支出":"收入"}紀錄</div>
           : <React.Fragment>
               <div className="sfp-donut-section">
-                <Donut data={catData.map(e=>({...e,id:e.name}))} size={180} />
+                <Donut
+                  data={(selectedCat && subCatData.length>0 ? subCatData : catData).map(e=>({...e,id:e.name}))}
+                  size={180} />
                 <div style={{textAlign:"center",fontSize:12,color:"var(--ink-soft)",marginTop:6}}>
-                  總計 {fmtMoney(catData.reduce((s,e)=>s+e.value,0))}
+                  {selectedCat
+                    ? <span>
+                        <span style={{cursor:"pointer",color:"var(--accent)"}} onClick={()=>setSelectedCat(null)}>← 全部</span>
+                        　{selectedCat}
+                      </span>
+                    : <span>總計 {fmtMoney(catData.reduce((s,e)=>s+e.value,0))}</span>
+                  }
                 </div>
               </div>
               <div className="sfp-cat-list">
-                {catData.map((e,i)=>(
-                  <div className="sfp-cat-row" key={i}>
-                    <div className="sfp-cat-dot" style={{background:e.color}}></div>
-                    <span className="sfp-cat-name">{e.name}</span>
-                    <span className="sfp-cat-pct">{e.pct}%</span>
-                    <span className="sfp-cat-amt">{fmtMoney(e.value)}</span>
-                  </div>
-                ))}
+                {catData.map((e,i)=>{
+                  const hasChildren = categories.some(c=>c.parentId && (c.type===viewType) && (() => {
+                    const root = catById(categories, c.parentId);
+                    return root && root.name === e.name;
+                  })());
+                  const isSelected = selectedCat===e.name;
+                  return (
+                    <React.Fragment key={i}>
+                      <div
+                        className={"sfp-cat-row"+(hasChildren?" clickable":"")+(isSelected?" selected":"")}
+                        onClick={hasChildren ? ()=>setSelectedCat(isSelected?null:e.name) : undefined}>
+                        <div className="sfp-cat-dot" style={{background:e.color}}></div>
+                        <span className="sfp-cat-name">{e.name}</span>
+                        <span className="sfp-cat-pct">{e.pct}%</span>
+                        <span className="sfp-cat-amt">{fmtMoney(e.value)}</span>
+                        {hasChildren && <span className={"sfp-expand-arrow"+(isSelected?" open":"")}>▶</span>}
+                      </div>
+                      {isSelected && subCatData.map((s,j)=>(
+                        <div className="sfp-subcat-row" key={j}>
+                          <div className="sfp-subcat-dot" style={{background:s.color}}></div>
+                          <span className="sfp-subcat-name">{s.name}</span>
+                          <span className="sfp-subcat-pct">{s.pct}%</span>
+                          <span className="sfp-subcat-amt">{fmtMoney(s.value)}</span>
+                        </div>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
               </div>
             </React.Fragment>
         }
