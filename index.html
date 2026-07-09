@@ -321,6 +321,34 @@
   .stats-table .acc-icon-sm{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
     background:var(--field-bg);font-size:12px;margin-right:5px;flex-shrink:0;overflow:hidden;vertical-align:middle;}
   .stats-table .acc-icon-sm img{width:100%;height:100%;object-fit:cover;}
+  .stats-fullpage{position:fixed;inset:0;z-index:100;background:var(--bg);overflow-y:auto;
+    display:flex;flex-direction:column;}
+  .stats-fullpage .sfp-header{display:flex;align-items:center;justify-content:space-between;
+    padding:18px 18px 10px;background:var(--bg);position:sticky;top:0;z-index:2;}
+  .stats-fullpage .sfp-header h2{margin:0;font-size:20px;font-weight:700;}
+  .stats-fullpage .sfp-body{padding:0 18px 100px;flex:1;}
+  .sfp-period-tabs{display:flex;gap:0;background:var(--field-bg);border-radius:12px;padding:3px;margin-bottom:14px;}
+  .sfp-period-tabs button{flex:1;padding:8px 0;border:none;border-radius:9px;font-size:14px;font-weight:600;
+    background:none;color:var(--ink-soft);}
+  .sfp-period-tabs button.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1);}
+  .sfp-type-tabs{display:flex;gap:0;background:var(--field-bg);border-radius:12px;padding:3px;margin-bottom:14px;}
+  .sfp-type-tabs button{flex:1;padding:8px 0;border:none;border-radius:9px;font-size:14px;font-weight:600;
+    background:none;color:var(--ink-soft);}
+  .sfp-type-tabs button.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1);}
+  .sfp-donut-section{display:flex;flex-direction:column;align-items:center;gap:0;margin-bottom:4px;}
+  .sfp-cat-list{width:100%;margin-top:10px;}
+  .sfp-cat-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
+  .sfp-cat-row:last-child{border-bottom:none;}
+  .sfp-cat-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+  .sfp-cat-name{flex:1;font-size:15px;font-weight:600;}
+  .sfp-cat-pct{font-size:13px;color:var(--ink-soft);width:46px;text-align:right;flex-shrink:0;}
+  .sfp-cat-amt{font-size:15px;font-weight:700;width:72px;text-align:right;flex-shrink:0;}
+  .sfp-section{background:var(--surface);border-radius:14px;padding:14px 16px;margin-bottom:12px;}
+  .sfp-section h3{font-size:14px;color:var(--ink-soft);margin:0 0 12px;font-weight:600;}
+  .sfp-stat-row{display:flex;gap:12px;font-size:13px;}
+  .sfp-stat-row .s{flex:1;background:var(--field-bg);border-radius:10px;padding:10px;text-align:center;}
+  .sfp-stat-row .s span{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:4px;}
+  .sfp-stat-row .s b{font-size:14px;font-weight:700;}
   .donut-wrap{display:flex;align-items:center;gap:18px;}
   .donut-legend{flex:1;display:flex;flex-direction:column;gap:6px;}
   .legend-row{display:flex;align-items:center;gap:8px;font-size:13px;}
@@ -1866,6 +1894,156 @@ function InvestmentModal({initial, onSave, onClose}){
 }
 
 /* ---------- 主分頁 ---------- */
+function StatsFullPage({categories, accounts, allMonthTx, defaultViewType, onClose}){
+  const [periodMode, setPeriodMode] = useState("month");
+  const [cursorMonth, setCursorMonth] = useState(()=>{const d=new Date();d.setDate(1);return d;});
+  const [customStart, setCustomStart] = useState(()=>{const d=new Date();d.setDate(1);return toDateStr(d);});
+  const [customEnd, setCustomEnd] = useState(()=>toDateStr(new Date()));
+  const [viewType, setViewType] = useState(defaultViewType||"expense");
+
+  // 用 allMonthTx 是從 App 傳入的，但這裡要獨立篩選所有交易
+  // 注意：allMonthTx只是本月資料，我們需要從父層拿全部transactions
+  // 改由 App 透過 allTx 傳入；暫用 allMonthTx 作為全部可用資料
+  const tx = useMemo(()=>{
+    if(periodMode==="month"){
+      const key = cursorMonth.getFullYear()+"-"+pad(cursorMonth.getMonth()+1);
+      return allMonthTx.filter(t=>t.date.slice(0,7)===key);
+    }
+    if(customEnd<customStart) return [];
+    return allMonthTx.filter(t=>t.date>=customStart && t.date<=customEnd);
+  }, [allMonthTx, periodMode, cursorMonth, customStart, customEnd]);
+
+  const catData = useMemo(()=>{
+    const map = {};
+    tx.filter(t=>t.type===viewType).forEach(t=>{
+      const cat = catById(categories, t.categoryId);
+      const root = cat&&cat.parentId ? catById(categories,cat.parentId) : cat;
+      const name = root?root.name:(cat?cat.name:"未分類");
+      const color = root?root.color:(cat?cat.color:"#ccc");
+      if(!map[name]) map[name]={name,color,value:0};
+      map[name].value += t.amount;
+    });
+    const list = Object.values(map).sort((a,b)=>b.value-a.value);
+    const total = list.reduce((s,e)=>s+e.value,0);
+    list.forEach(e=>{e.pct=total>0?Math.round(e.value/total*1000)/10:0;});
+    return list;
+  }, [tx, viewType, categories]);
+
+  const totalIncome = tx.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
+  const totalExpense = tx.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+
+  const accStats = useMemo(()=>{
+    return accounts.filter(a=>!isExcluded(a)).map(acc=>{
+      const atx = tx.filter(t=>t.accountId===acc.id);
+      const income = atx.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
+      const expense = atx.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+      return {acc,income,expense,balance:income-expense};
+    }).filter(r=>r.income>0||r.expense>0);
+  }, [tx, accounts]);
+
+  function prevMonth(){setCursorMonth(d=>{const n=new Date(d);n.setMonth(n.getMonth()-1);return n;});}
+  function nextMonth(){setCursorMonth(d=>{const n=new Date(d);n.setMonth(n.getMonth()+1);return n;});}
+  const periodLabel = periodMode==="month" ? fmtMonthLabel(cursorMonth) : customStart.slice(0,7)+" ～ "+customEnd.slice(0,7);
+
+  return (
+    <div className="sfp-body">
+      {/* 時間模式 */}
+      <div className="sfp-period-tabs">
+        {["month","custom"].map(m=>(
+          <button key={m} className={periodMode===m?"active":""} onClick={()=>setPeriodMode(m)}>
+            {m==="month"?"月份":"自訂"}
+          </button>
+        ))}
+      </div>
+
+      {periodMode==="month" &&
+        <div className="month-switcher" style={{paddingBottom:12}}>
+          <button onClick={prevMonth}>‹</button>
+          <span className="label">{fmtMonthLabel(cursorMonth)}</span>
+          <button onClick={nextMonth}>›</button>
+        </div>
+      }
+      {periodMode==="custom" &&
+        <div className="date-range-row" style={{marginBottom:12}}>
+          <input type="month" value={customStart.slice(0,7)} onChange={e=>setCustomStart(e.target.value+"-01")} />
+          <span>～</span>
+          <input type="month" value={customEnd.slice(0,7)} onChange={e=>{const d=new Date(e.target.value+"-01");d.setMonth(d.getMonth()+1);d.setDate(0);setCustomEnd(toDateStr(d));}} />
+        </div>
+      }
+
+      {/* 支出/收入切換 */}
+      <div className="sfp-type-tabs">
+        {["expense","income"].map(t=>(
+          <button key={t} className={viewType===t?"active":""} onClick={()=>setViewType(t)}>
+            {t==="expense"?"支出":"收入"}
+          </button>
+        ))}
+      </div>
+
+      {/* 圓餅圖 */}
+      <div className="sfp-section">
+        {catData.length===0
+          ? <div className="empty-hint">沒有{viewType==="expense"?"支出":"收入"}紀錄</div>
+          : <React.Fragment>
+              <div className="sfp-donut-section">
+                <Donut data={catData.map(e=>({...e,id:e.name}))} size={180} />
+                <div style={{textAlign:"center",fontSize:12,color:"var(--ink-soft)",marginTop:6}}>
+                  總計 {fmtMoney(catData.reduce((s,e)=>s+e.value,0))}
+                </div>
+              </div>
+              <div className="sfp-cat-list">
+                {catData.map((e,i)=>(
+                  <div className="sfp-cat-row" key={i}>
+                    <div className="sfp-cat-dot" style={{background:e.color}}></div>
+                    <span className="sfp-cat-name">{e.name}</span>
+                    <span className="sfp-cat-pct">{e.pct}%</span>
+                    <span className="sfp-cat-amt">{fmtMoney(e.value)}</span>
+                  </div>
+                ))}
+              </div>
+            </React.Fragment>
+        }
+      </div>
+
+      {/* 總覽 */}
+      <div className="sfp-section">
+        <h3>總覽</h3>
+        <div className="sfp-stat-row">
+          <div className="s"><span>筆數</span><b>{tx.filter(t=>t.type!=="transfer").length}</b></div>
+          <div className="s"><span>收入</span><b style={{color:"var(--income)"}}>{fmtMoney(totalIncome)}</b></div>
+          <div className="s"><span>支出</span><b style={{color:"var(--expense)"}}>{fmtMoney(totalExpense)}</b></div>
+          <div className="s"><span>結餘</span><b>{fmtMoney(totalIncome-totalExpense)}</b></div>
+        </div>
+      </div>
+
+      {/* 帳戶 */}
+      {accStats.length>0 &&
+        <div className="sfp-section">
+          <h3>帳戶<span style={{fontSize:12,fontWeight:400,marginLeft:8,color:"var(--ink-soft)"}}>不含轉帳</span></h3>
+          <table className="stats-table">
+            <thead><tr><th>名稱</th><th>收入</th><th>支出</th><th>結餘</th></tr></thead>
+            <tbody>
+              {accStats.map(({acc,income,expense,balance})=>(
+                <tr key={acc.id}>
+                  <td>
+                    <span className="acc-icon-sm">
+                      {acc.iconImage?<img src={acc.iconImage} alt=""/>:(acc.icon||"💰")}
+                    </span>
+                    {acc.name.length>5?acc.name.slice(0,5)+"…":acc.name}
+                  </td>
+                  <td style={{color:"var(--income)"}}>{income>0?fmtMoney(income):"—"}</td>
+                  <td style={{color:"var(--expense)"}}>{expense>0?fmtMoney(expense):"—"}</td>
+                  <td style={{fontWeight:700,color:balance>=0?"var(--income)":"var(--expense)"}}>{fmtMoney(balance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  );
+}
+
 function SpendingAnalysisCard({categories, accounts, monthTx, periodLabel}){
   const [viewType, setViewType] = useState("expense");
   const [showPie, setShowPie] = useState(false);
@@ -1947,85 +2125,13 @@ function SpendingAnalysisCard({categories, accounts, monthTx, periodLabel}){
       }
 
       {showPie &&
-        <div className="tx-detail-overlay" onClick={()=>setShowPie(false)}>
-          <div className="tx-detail-card" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
-            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:4}}>
-              <button className="detail-close-x" onClick={()=>setShowPie(false)}>✕</button>
-            </div>
-            <div className="analysis-header" style={{marginBottom:12}}>
-              <h2 style={{margin:0}}>{label}統計</h2>
-              <button className="analysis-btn" onClick={()=>setViewType(v=>v==="expense"?"income":"expense")}>
-                <i className="ph ph-arrows-left-right"></i>
-              </button>
-            </div>
-
-            {/* 圓餅圖 */}
-            {total>0 &&
-              <React.Fragment>
-                <div className="pie-sheet-donut">
-                  <Donut data={catData.map(e=>({...e,id:e.name}))} size={120} />
-                  <div style={{flex:1}}>
-                    {catData.map((e,i)=>(
-                      <div className="pie-legend-row" key={i}>
-                        <div className="pie-legend-dot" style={{background:e.color}}></div>
-                        <span className="pie-legend-name">{e.name}</span>
-                        <span className="pie-legend-pct">{e.pct}%</span>
-                        <span className="pie-legend-amt">{fmtMoney(e.value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div style={{textAlign:"center",fontSize:13,color:"var(--ink-soft)",marginBottom:16}}>
-                  總計：{fmtMoney(total)}
-                </div>
-              </React.Fragment>
-            }
-
-            {/* 總計表 */}
-            <div className="stats-section">
-              <h3>總覽</h3>
-              <table className="stats-table">
-                <thead>
-                  <tr><th>筆數</th><th>收入</th><th>支出</th><th>結餘</th></tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>{monthTx.filter(t=>t.type!=="transfer").length}</td>
-                    <td style={{color:"var(--income)"}}>{fmtMoney(totalIncome)}</td>
-                    <td style={{color:"var(--expense)"}}>{fmtMoney(totalExpense)}</td>
-                    <td style={{fontWeight:700}}>{fmtMoney(totalIncome-totalExpense)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            {/* 帳戶明細 */}
-            {accStats.length>0 &&
-              <div className="stats-section">
-                <h3>帳戶（不含轉帳）</h3>
-                <table className="stats-table">
-                  <thead>
-                    <tr><th>名稱</th><th>收入</th><th>支出</th><th>結餘</th></tr>
-                  </thead>
-                  <tbody>
-                    {accStats.map(({acc,income,expense,balance})=>(
-                      <tr key={acc.id}>
-                        <td>
-                          <span className="acc-icon-sm">
-                            {acc.iconImage ? <img src={acc.iconImage} alt="" /> : (acc.icon||"💰")}
-                          </span>
-                          {acc.name.length>4 ? acc.name.slice(0,4)+"…" : acc.name}
-                        </td>
-                        <td style={{color:"var(--income)"}}>{income>0?fmtMoney(income):"—"}</td>
-                        <td style={{color:"var(--expense)"}}>{expense>0?fmtMoney(expense):"—"}</td>
-                        <td style={{fontWeight:700,color:balance>=0?"var(--income)":"var(--expense)"}}>{fmtMoney(balance)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            }
+        <div className="stats-fullpage">
+          <div className="sfp-header">
+            <h2>統計</h2>
+            <button className="detail-close-x" style={{fontSize:20}} onClick={()=>setShowPie(false)}>✕</button>
           </div>
+          <StatsFullPage categories={categories} accounts={accounts} allMonthTx={monthTx}
+            defaultViewType={viewType} onClose={()=>setShowPie(false)} />
         </div>
       }
     </div>
