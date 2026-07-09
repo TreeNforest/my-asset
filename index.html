@@ -1065,7 +1065,7 @@ function TxRow({t, categories, accounts, onClick}){
     const subLabel = [(fromAcc?fromAcc.name:"?")+" → "+(toAcc?toAcc.name:"?"), t.note||null].filter(Boolean).join("・");
     return (
       <div className="tx-item" onClick={onClick}>
-        <div className="icon transfer-icon">🔁</div>
+        <div className="icon transfer-icon"><i className="ph ph-arrows-clockwise" style={{fontSize:20}}></i></div>
         <div className="mid">
           <div className="cat">轉帳</div>
           <div className="note">{subLabel}</div>
@@ -1150,7 +1150,7 @@ function TxDetailSheet({t, categories, accounts, onEdit, onClose}){
           </div>
           <div style={{textAlign:"center", marginBottom:16}}>
             <div className="tx-d-icon-wrap" style={{background:iconBg}}>
-              {isTransfer ? "🔁" : renderCatIcon(cat?cat.icon:"❓", 32)}
+              {isTransfer ? <i className="ph ph-arrows-clockwise" style={{fontSize:32}}></i> : renderCatIcon(cat?cat.icon:"❓", 32)}
             </div>
             <div style={{fontSize:18, fontWeight:700, marginTop:4}}>
               {isTransfer ? "轉帳" : (cat ? cat.name : "未分類")}
@@ -1512,7 +1512,7 @@ function AddActionSheet({onPick, onClose}){
         <h2>新增一筆</h2>
         <div className="action-row" style={{flexWrap:"wrap",gap:20}}>
           <button className="action-btn transfer" onClick={()=>onPick("transfer")}>
-            <span className="ic">🔁</span><span>轉帳</span>
+            <span className="ic"><i className="ph ph-arrows-clockwise" style={{fontSize:22,color:"#fff"}}></i></span><span>轉帳</span>
           </button>
           <button className="action-btn expense" onClick={()=>onPick("expense")}>
             <span className="ic">↑</span><span>支出</span>
