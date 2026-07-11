@@ -473,8 +473,11 @@
   .setting-nav-row .left{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;}
   .setting-nav-row .right{font-size:13px;color:var(--ink-soft);}
   .photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:4px;}
-  .photo-grid-item{aspect-ratio:1;overflow:hidden;border-radius:8px;cursor:pointer;}
+  .photo-grid-item{aspect-ratio:1;overflow:hidden;border-radius:8px;cursor:pointer;position:relative;}
   .photo-grid-item img{width:100%;height:100%;object-fit:cover;}
+  .photo-grid-item .photo-date{position:absolute;bottom:0;left:0;right:0;
+    background:linear-gradient(transparent,rgba(0,0,0,.5));
+    color:#fff;font-size:9px;padding:6px 4px 3px;text-align:center;line-height:1.2;}
   .photo-empty{text-align:center;color:var(--ink-soft);font-size:14px;padding:40px 0;}
   .acc-row .icon-btn{background:none;border:none;font-size:15px;color:var(--ink-soft);padding:4px;}
   .acc-row .drag-handle{font-size:17px;color:var(--ink-soft);padding:4px 2px;touch-action:none;cursor:grab;}
@@ -1191,10 +1194,27 @@ function TxRow({t, categories, accounts, onClick}){
 
 function TxLightbox({images, startIndex, onClose}){
   const [idx, setIdx] = useState(startIndex||0);
+  const touchStartX = useRef(null);
+
+  function handleTouchStart(e){ touchStartX.current = e.touches[0].clientX; }
+  function handleTouchEnd(e){
+    if(touchStartX.current===null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    if(Math.abs(dx)<40) return;
+    if(dx<0 && idx<images.length-1) setIdx(i=>i+1);
+    if(dx>0 && idx>0) setIdx(i=>i-1);
+  }
+
   return (
-    <div className="tx-lightbox" onClick={onClose}>
+    <div className="tx-lightbox"
+      onClick={onClose}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}>
       <button className="tx-lightbox-close" onClick={onClose}>✕</button>
-      <img src={images[idx]} alt="" onClick={e=>e.stopPropagation()} />
+      <img src={images[idx]} alt=""
+        onClick={e=>e.stopPropagation()}
+        style={{userSelect:"none",WebkitUserSelect:"none",touchAction:"pan-y"}} />
       {images.length>1 &&
         <div style={{position:"absolute",bottom:24,left:0,right:0,display:"flex",justifyContent:"center",gap:8}}>
           {images.map((_,i)=>(
@@ -3180,6 +3200,8 @@ function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
                   {allPhotos.map((p,i)=>(
                     <div key={i} className="photo-grid-item" onClick={()=>openPhoto(allPhotos, i)}>
                       <img src={p.url} alt="" />
+                      <div className="photo-date">{p.txDate.slice(5).replace("-","/")}
+                      </div>
                     </div>
                   ))}
                 </div>
