@@ -467,6 +467,15 @@
   .img-lib-del{position:absolute;top:1px;right:1px;width:15px;height:15px;border-radius:50%;
     background:rgba(0,0,0,.55);color:#fff;font-size:9px;line-height:15px;text-align:center;
     border:none;padding:0;}
+  .setting-nav-row{display:flex;align-items:center;justify-content:space-between;
+    padding:13px 16px;background:var(--surface);border-radius:14px;margin-bottom:8px;cursor:pointer;}
+  .setting-nav-row:active{opacity:.75;}
+  .setting-nav-row .left{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;}
+  .setting-nav-row .right{font-size:13px;color:var(--ink-soft);}
+  .photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:4px;}
+  .photo-grid-item{aspect-ratio:1;overflow:hidden;border-radius:8px;cursor:pointer;}
+  .photo-grid-item img{width:100%;height:100%;object-fit:cover;}
+  .photo-empty{text-align:center;color:var(--ink-soft);font-size:14px;padding:40px 0;}
   .acc-row .icon-btn{background:none;border:none;font-size:15px;color:var(--ink-soft);padding:4px;}
   .acc-row .drag-handle{font-size:17px;color:var(--ink-soft);padding:4px 2px;touch-action:none;cursor:grab;}
 
@@ -1026,28 +1035,42 @@ function GroupedBarChart({months, onPick, selectedIndex}){
     </div>
   );
 }
-function Donut({data, size}){
+function Donut({data, size, label}){
   size = size || 140;
-  const thickness = 20;
-  const total = data.reduce((s,d)=>s+d.value,0) || 1;
-  const radius = (size-thickness)/2;
-  const circumference = 2*Math.PI*radius;
-  let offset = 0;
+  const cx = size/2, cy = size/2;
+  const R = size*0.38, r = size*0.22;
+  const total = data.reduce((s,d)=>s+d.value,0)||1;
+
+  function polarToXY(angle, rad){
+    const a = (angle - 90) * Math.PI / 180;
+    return [cx + rad*Math.cos(a), cy + rad*Math.sin(a)];
+  }
+  function arcPath(startAngle, endAngle, outerR, innerR){
+    // 避免完整圓（360°）造成path閉合異常
+    const sweep = endAngle - startAngle;
+    const safeEnd = sweep >= 360 ? startAngle + 359.99 : endAngle;
+    const large = (safeEnd - startAngle) > 180 ? 1 : 0;
+    const [x1,y1] = polarToXY(startAngle, outerR);
+    const [x2,y2] = polarToXY(safeEnd, outerR);
+    const [x3,y3] = polarToXY(safeEnd, innerR);
+    const [x4,y4] = polarToXY(startAngle, innerR);
+    return `M${x1},${y1} A${outerR},${outerR} 0 ${large} 1 ${x2},${y2} L${x3},${y3} A${innerR},${innerR} 0 ${large} 0 ${x4},${y4} Z`;
+  }
+
+  let angle = 0;
   return (
     <svg width={size} height={size} viewBox={"0 0 "+size+" "+size}>
-      <g transform={"translate("+size/2+","+size/2+") rotate(-90)"}>
-        {data.map((d,i)=>{
-          const frac = d.value/total;
-          const dash = frac*circumference;
-          const el = (
-            <circle key={i} r={radius} fill="none" stroke={d.color} strokeWidth={thickness}
-              strokeDasharray={dash+" "+(circumference-dash)} strokeDashoffset={-offset}></circle>
-          );
-          offset += dash;
-          return el;
-        })}
-      </g>
-      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" fontSize="13" fill="var(--ink)">支出</text>
+      {data.map((d,i)=>{
+        const deg = d.value/total*360;
+        const start = angle;
+        angle += deg;
+        if(deg < 0.5) return null;
+        return <path key={i} d={arcPath(start, angle, R, r)} fill={d.color} />;
+      })}
+      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
+        fontSize={size>150?14:11} fill="var(--ink-soft)" fontWeight="400">
+        {label||""}
+      </text>
     </svg>
   );
 }
@@ -2063,7 +2086,7 @@ function StatsFullPage({categories, accounts, allMonthTx, defaultViewType, onClo
             :
             <React.Fragment>
               <div className="sfp-donut-section">
-                <Donut data={catData.map(e=>({...e,id:e.name}))} size={180} />
+                <Donut data={catData.map(e=>({...e,id:e.name}))} size={180} label={viewType==="expense"?"支出":"收入"} />
                 <div style={{textAlign:"center",fontSize:12,color:"var(--ink-soft)",marginTop:6}}>
                   總計 {fmtMoney(catData.reduce((s,e)=>s+e.value,0))}
                 </div>
@@ -3094,6 +3117,131 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
   );
 }
 
+function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
+  onAddCategory, onEditCategory, onDeleteCategory, onReorderCategoryGroup, onRecolorAll,
+  onViewTx, onClose}){
+  const [subPage, setSubPage] = useState(null); // null | "categories" | "photos"
+  const [lightboxIdx, setLightboxIdx] = useState(null);
+  const [lightboxImgs, setLightboxImgs] = useState([]);
+
+  // 收集所有交易圖片
+  const allPhotos = useMemo(()=>{
+    const photos = [];
+    transactions.filter(t=>Array.isArray(t.images)&&t.images.length>0).forEach(t=>{
+      t.images.forEach((url,i)=>{
+        photos.push({url, txId:t.id, txDate:t.date, idx:i, tx:t});
+      });
+    });
+    return photos.sort((a,b)=>b.txDate.localeCompare(a.txDate));
+  }, [transactions]);
+
+  const catCount = categories.filter(c=>!c.parentId).length;
+
+  function openPhoto(photos, idx){
+    setLightboxImgs(photos.map(p=>p.url));
+    setLightboxIdx(idx);
+  }
+
+  if(subPage==="categories"){
+    return (
+      <div className="stats-fullpage">
+        <div className="sfp-header">
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <button className="detail-close-x" style={{fontSize:18}} onClick={()=>setSubPage(null)}>‹</button>
+            <h2 style={{margin:0}}>分類管理</h2>
+          </div>
+          <button className="detail-close-x" style={{fontSize:20}} onClick={onClose}>✕</button>
+        </div>
+        <div className="sfp-body">
+          <CategoriesSection categories={categories}
+            onAddCategory={onAddCategory} onEditCategory={onEditCategory}
+            onDeleteCategory={onDeleteCategory} onReorderCategoryGroup={onReorderCategoryGroup}
+            onRecolorAll={onRecolorAll} />
+        </div>
+      </div>
+    );
+  }
+
+  if(subPage==="photos"){
+    return (
+      <React.Fragment>
+        <div className="stats-fullpage">
+          <div className="sfp-header">
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <button className="detail-close-x" style={{fontSize:18}} onClick={()=>setSubPage(null)}>‹</button>
+              <h2 style={{margin:0}}>相簿</h2>
+            </div>
+            <button className="detail-close-x" style={{fontSize:20}} onClick={onClose}>✕</button>
+          </div>
+          <div className="sfp-body">
+            {allPhotos.length===0
+              ? <div className="photo-empty">還沒有附圖的交易紀錄</div>
+              : <div className="photo-grid">
+                  {allPhotos.map((p,i)=>(
+                    <div key={i} className="photo-grid-item" onClick={()=>openPhoto(allPhotos, i)}>
+                      <img src={p.url} alt="" />
+                    </div>
+                  ))}
+                </div>
+            }
+          </div>
+        </div>
+        {lightboxIdx!==null &&
+          <TxLightbox images={lightboxImgs} startIndex={lightboxIdx} onClose={()=>setLightboxIdx(null)} />
+        }
+      </React.Fragment>
+    );
+  }
+
+  // 主設定頁
+  return (
+    <div className="stats-fullpage">
+      <div className="sfp-header">
+        <h2>設定</h2>
+        <button className="detail-close-x" style={{fontSize:20}} onClick={onClose}>✕</button>
+      </div>
+      <div className="sfp-body">
+        {/* 外觀 */}
+        <div className="sfp-section" style={{marginBottom:12}}>
+          <h3>外觀</h3>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <i className="ph-duotone ph-moon-stars" style={{fontSize:20,color:"var(--ink-soft)"}}></i>
+              <span style={{fontSize:15,fontWeight:600}}>深色模式</span>
+            </div>
+            <button type="button" onClick={()=>setDarkMode(d=>!d)}
+              style={{width:44,height:26,borderRadius:13,border:"none",
+                background:darkMode?"var(--income)":"var(--line)",
+                position:"relative",transition:"background .2s",flexShrink:0}}>
+              <span style={{position:"absolute",top:3,
+                left:darkMode?19:3,width:20,height:20,borderRadius:"50%",background:"#fff",
+                transition:"left .2s",display:"block"}}></span>
+            </button>
+          </div>
+        </div>
+
+        {/* 分類管理 */}
+        <div className="setting-nav-row" onClick={()=>setSubPage("categories")}>
+          <div className="left">
+            <i className="ph-duotone ph-tag" style={{fontSize:20,color:"var(--accent)"}}></i>
+            分類管理
+          </div>
+          <span className="right">{catCount} 個大分類 ›</span>
+        </div>
+
+        {/* 相簿 */}
+        <div className="setting-nav-row" onClick={()=>setSubPage("photos")}>
+          <div className="left">
+            <i className="ph-duotone ph-images" style={{fontSize:20,color:"var(--accent)"}}></i>
+            交易相簿
+          </div>
+          <span className="right">{allPhotos.length} 張照片 ›</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsTab({categories, accounts, transactions, investments, onViewTx,
   onAddCategory, onEditCategory, onDeleteCategory, onReorderCategoryGroup, onRecolorAll,
   onAddAccount, onEditAccount, onDeleteAccount, onReorderGroup,
@@ -3482,31 +3630,14 @@ function App(){
       }
 
       {showSettings &&
-        <div className="stats-fullpage">
-          <div className="sfp-header">
-            <h2>設定</h2>
-            <button className="detail-close-x" style={{fontSize:20}} onClick={()=>setShowSettings(false)}>✕</button>
-          </div>
-          <div className="sfp-body">
-            <div className="sfp-section" style={{marginBottom:12}}>
-              <h3>外觀</h3>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0"}}>
-                <span style={{fontSize:15,fontWeight:600}}>深色模式</span>
-                <button type="button" onClick={()=>setDarkMode(d=>!d)}
-                  style={{width:44,height:26,borderRadius:13,border:"none",
-                    background:darkMode?"var(--income)":"var(--line)",
-                    position:"relative",transition:"background .2s",flexShrink:0}}>
-                  <span style={{position:"absolute",top:3,
-                    left:darkMode?19:3,width:20,height:20,borderRadius:"50%",background:"#fff",
-                    transition:"left .2s",display:"block"}}></span>
-                </button>
-              </div>
-            </div>
-            <CategoriesSection categories={categories}
-              onAddCategory={addCategory} onEditCategory={editCategory} onDeleteCategory={deleteCategory}
-              onReorderCategoryGroup={reorderCategoryGroup} onRecolorAll={recolorAll} />
-          </div>
-        </div>
+        <SettingsOverlay
+          darkMode={darkMode} setDarkMode={setDarkMode}
+          categories={categories} transactions={transactions}
+          onAddCategory={addCategory} onEditCategory={editCategory}
+          onDeleteCategory={deleteCategory} onReorderCategoryGroup={reorderCategoryGroup}
+          onRecolorAll={recolorAll}
+          onViewTx={openViewTx}
+          onClose={()=>setShowSettings(false)} />
       }
 
       {viewingTx &&
