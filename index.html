@@ -3411,7 +3411,9 @@ function SubscriptionsSection({subscriptions, categories, accounts, transactions
     return sub.startDate;
   }
 
-  const monthlyTotal = subscriptions.filter(s=>s.active!==false).reduce((sum,s)=>{
+  const activeSubs = subscriptions.filter(s=>s.active!==false);
+  const pausedCount = subscriptions.filter(s=>s.active===false).length;
+  const monthlyTotal = activeSubs.reduce((sum,s)=>{
     const a = s.amount||0;
     if(s.cycle==="monthly") return sum+a;
     if(s.cycle==="yearly") return sum+a/12;
@@ -3419,30 +3421,52 @@ function SubscriptionsSection({subscriptions, categories, accounts, transactions
     if(s.cycle==="quarterly") return sum+a/3;
     return sum;
   }, 0);
+  const yearlyTotal = activeSubs.reduce((sum,s)=>{
+    const a = s.amount||0;
+    if(s.cycle==="monthly") return sum+a*12;
+    if(s.cycle==="yearly") return sum+a;
+    if(s.cycle==="weekly") return sum+a*52;
+    if(s.cycle==="quarterly") return sum+a*4;
+    return sum;
+  }, 0);
 
   return (
     <div>
       {subscriptions.length>0 &&
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-          background:"var(--surface)",borderRadius:12,padding:"12px 14px",marginBottom:12}}>
-          <span style={{fontSize:13,color:"var(--ink-soft)"}}>每月平均</span>
-          <span style={{fontSize:16,fontWeight:700,color:"var(--expense)"}}>{fmtMoney(Math.round(monthlyTotal))}</span>
+        <div style={{display:"flex",gap:8,marginBottom:12}}>
+          <div style={{flex:1,background:"var(--surface)",borderRadius:12,padding:"12px 14px"}}>
+            <div style={{fontSize:12,color:"var(--ink-soft)",marginBottom:4}}>每月平均{pausedCount>0&&<span style={{marginLeft:4,fontSize:11}}>（{pausedCount}項暫停中）</span>}</div>
+            <div style={{fontSize:16,fontWeight:700,color:"var(--expense)"}}>{fmtMoney(Math.round(monthlyTotal))}</div>
+          </div>
+          <div style={{flex:1,background:"var(--surface)",borderRadius:12,padding:"12px 14px"}}>
+            <div style={{fontSize:12,color:"var(--ink-soft)",marginBottom:4}}>每年預期</div>
+            <div style={{fontSize:16,fontWeight:700,color:"var(--expense)"}}>{fmtMoney(Math.round(yearlyTotal))}</div>
+          </div>
         </div>
       }
       {subscriptions.length===0 && <div className="empty-hint">還沒有訂閱項目</div>}
       {subscriptions.map(sub=>{
-        const next = nextBillingDate(sub);
+        const isPaused = sub.active===false;
+        const next = !isPaused ? nextBillingDate(sub) : null;
         return (
-          <div className="sub-row" key={sub.id} onClick={()=>setModal({initial:sub})}>
-            <div className="sub-icon">
+          <div className="sub-row" key={sub.id} style={{opacity:isPaused?0.6:1}}>
+            <div className="sub-icon" onClick={()=>setModal({initial:sub})} style={{cursor:"pointer"}}>
               {sub.iconImage ? <img src={sub.iconImage} alt="" /> : <span style={{fontSize:22}}>{sub.icon||"📦"}</span>}
             </div>
-            <div className="sub-info">
-              <div className="name">{sub.name}</div>
-              <div className="meta">下次扣款：{next} · <span className="sub-cycle-badge">{CYCLE_LABELS[sub.cycle]||sub.cycle}</span></div>
+            <div className="sub-info" onClick={()=>setModal({initial:sub})} style={{cursor:"pointer"}}>
+              <div className="name">{sub.name}{isPaused && <span style={{fontSize:11,color:"var(--ink-soft)",background:"var(--field-bg)",borderRadius:6,padding:"1px 6px",marginLeft:6}}>暫停中</span>}</div>
+              <div className="meta">{isPaused ? "已暫停" : "下次扣款："+next+" · "}<span className="sub-cycle-badge">{CYCLE_LABELS[sub.cycle]||sub.cycle}</span></div>
             </div>
-            <div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
               <div className="sub-amount">{fmtMoney(sub.amount)}</div>
+              <button type="button"
+                onClick={()=>onEdit(sub.id,{...sub,active:!isPaused})}
+                style={{width:36,height:20,borderRadius:10,border:"none",padding:0,
+                  background:isPaused?"var(--line)":"var(--income)",position:"relative",flexShrink:0}}>
+                <span style={{position:"absolute",top:2,
+                  left:isPaused?2:16,width:16,height:16,borderRadius:"50%",background:"#fff",
+                  transition:"left .2s",display:"block"}}></span>
+              </button>
             </div>
           </div>
         );
