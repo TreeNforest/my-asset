@@ -3277,7 +3277,7 @@ function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
 
 const CYCLE_LABELS = {monthly:"每月", yearly:"每年", weekly:"每週", quarterly:"每季"};
 
-function SubscriptionModal({initial, categories, accounts, onSave, onClose}){
+function SubscriptionModal({initial, categories, accounts, onSave, onDelete, onClose}){
   const [name, setName] = useState((initial&&initial.name)||"");
   const [amount, setAmount] = useState(initial?String(initial.amount||0):"0");
   const [cycle, setCycle] = useState((initial&&initial.cycle)||"monthly");
@@ -3287,6 +3287,7 @@ function SubscriptionModal({initial, categories, accounts, onSave, onClose}){
   const [note, setNote] = useState((initial&&initial.note)||"");
   const [iconImage, setIconImage] = useState((initial&&initial.iconImage)||null);
   const [icon, setIcon] = useState((initial&&initial.icon)||"📦");
+  const [active, setActive] = useState(initial ? initial.active!==false : true);
   const [uploading, setUploading] = useState(false);
 
   async function handleFile(e){
@@ -3301,7 +3302,7 @@ function SubscriptionModal({initial, categories, accounts, onSave, onClose}){
     if(!name.trim()){ alert("請輸入訂閱名稱"); return; }
     const n = parseFloat(amount)||0;
     onSave({name:name.trim(), amount:n, cycle, startDate, accountId:accountId||null,
-      categoryId:categoryId||null, note, icon, iconImage, active:true});
+      categoryId:categoryId||null, note, icon, iconImage, active});
   }
 
   const expCats = flattenForSelect(categories, "expense");
@@ -3369,10 +3370,28 @@ function SubscriptionModal({initial, categories, accounts, onSave, onClose}){
           <label>備註</label>
           <input type="text" value={note} onChange={e=>setNote(e.target.value)} placeholder="選填" />
         </div>
+        <div className="field" style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <label style={{marginBottom:0,fontWeight:600}}>啟用訂閱</label>
+          <button type="button" onClick={()=>setActive(v=>!v)}
+            style={{width:44,height:26,borderRadius:13,border:"none",
+              background:active?"var(--income)":"var(--line)",
+              position:"relative",transition:"background .2s",flexShrink:0}}>
+            <span style={{position:"absolute",top:3,
+              left:active?19:3,width:20,height:20,borderRadius:"50%",background:"#fff",
+              transition:"left .2s",display:"block"}}></span>
+          </button>
+        </div>
+        {!active && <div style={{fontSize:12,color:"var(--ink-soft)",marginBottom:10}}>暫停中不會自動記扣款</div>}
         <div className="btn-row">
           <button className="btn ghost" onClick={onClose}>取消</button>
           <button className="btn primary" onClick={submit}>儲存</button>
         </div>
+        {initial && onDelete &&
+          <button className="btn danger" style={{width:"100%",marginTop:8}}
+            onClick={()=>{ if(confirm("確定刪除「"+initial.name+"」？")) onDelete(initial.id); }}>
+            刪除此訂閱
+          </button>
+        }
       </div>
     </div>
   );
@@ -3449,25 +3468,23 @@ function SubscriptionsSection({subscriptions, categories, accounts, transactions
         const isPaused = sub.active===false;
         const next = !isPaused ? nextBillingDate(sub) : null;
         return (
-          <div className="sub-row" key={sub.id} style={{opacity:isPaused?0.6:1}}>
-            <div className="sub-icon" onClick={()=>setModal({initial:sub})} style={{cursor:"pointer"}}>
+          <div className="sub-row" key={sub.id} style={{opacity:isPaused?0.55:1,cursor:"pointer"}}
+            onClick={()=>setModal({initial:sub})}>
+            <div className="sub-icon">
               {sub.iconImage ? <img src={sub.iconImage} alt="" /> : <span style={{fontSize:22}}>{sub.icon||"📦"}</span>}
             </div>
-            <div className="sub-info" onClick={()=>setModal({initial:sub})} style={{cursor:"pointer"}}>
-              <div className="name">{sub.name}{isPaused && <span style={{fontSize:11,color:"var(--ink-soft)",background:"var(--field-bg)",borderRadius:6,padding:"1px 6px",marginLeft:6}}>暫停中</span>}</div>
-              <div className="meta">{isPaused ? "已暫停" : "下次扣款："+next+" · "}<span className="sub-cycle-badge">{CYCLE_LABELS[sub.cycle]||sub.cycle}</span></div>
+            <div className="sub-info">
+              <div className="name">
+                {sub.name}
+                {isPaused && <span style={{fontSize:11,color:"var(--ink-soft)",background:"var(--field-bg)",
+                  borderRadius:6,padding:"1px 6px",marginLeft:6}}>暫停中</span>}
+              </div>
+              <div className="meta">
+                {isPaused ? "已暫停" : "下次扣款："+next}
+                {" · "}<span className="sub-cycle-badge">{CYCLE_LABELS[sub.cycle]||sub.cycle}</span>
+              </div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-              <div className="sub-amount">{fmtMoney(sub.amount)}</div>
-              <button type="button"
-                onClick={()=>onEdit(sub.id,{...sub,active:!isPaused})}
-                style={{width:36,height:20,borderRadius:10,border:"none",padding:0,
-                  background:isPaused?"var(--line)":"var(--income)",position:"relative",flexShrink:0}}>
-                <span style={{position:"absolute",top:2,
-                  left:isPaused?2:16,width:16,height:16,borderRadius:"50%",background:"#fff",
-                  transition:"left .2s",display:"block"}}></span>
-              </button>
-            </div>
+            <div className="sub-amount">{fmtMoney(sub.amount)}</div>
           </div>
         );
       })}
@@ -3476,19 +3493,12 @@ function SubscriptionsSection({subscriptions, categories, accounts, transactions
       {modal &&
         <SubscriptionModal initial={modal.initial} categories={categories} accounts={accounts}
           onClose={()=>setModal(null)}
+          onDelete={modal.initial ? async(id)=>{ await onDelete(id); setModal(null); } : null}
           onSave={async data=>{
             if(modal.initial){ await onEdit(modal.initial.id, data); }
             else { await onAdd(data); }
             setModal(null);
           }} />
-      }
-      {modal && modal.initial &&
-        <div style={{marginTop:8}}>
-          <button className="btn danger" style={{width:"100%"}} onClick={async()=>{
-            if(!confirm("確定刪除「"+modal.initial.name+"」？")) return;
-            await onDelete(modal.initial.id); setModal(null);
-          }}>刪除此訂閱</button>
-        </div>
       }
     </div>
   );
