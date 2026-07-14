@@ -3194,7 +3194,10 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
 function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
   onAddCategory, onEditCategory, onDeleteCategory, onReorderCategoryGroup, onRecolorAll,
   onViewTx, onClose}){
-  const [subPage, setSubPage] = useState(null); // null | "categories" | "photos"
+  const [subPage, setSubPage] = useState(null);
+  const [defaultMasked, setDefaultMasked] = useState(()=>{
+    try{ return localStorage.getItem("grove_default_masked")!=="false"; }catch(e){ return true; }
+  });
   const [lightboxIdx, setLightboxIdx] = useState(null);
   const [lightboxImgs, setLightboxImgs] = useState([]);
 
@@ -3280,7 +3283,7 @@ function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
         {/* 外觀 */}
         <div className="sfp-section" style={{marginBottom:12}}>
           <h3>外觀</h3>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid var(--line)"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <i className="ph-duotone ph-moon-stars" style={{fontSize:20,color:"var(--ink-soft)"}}></i>
               <span style={{fontSize:15,fontWeight:600}}>深色模式</span>
@@ -3291,6 +3294,27 @@ function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
                 position:"relative",transition:"background .2s",flexShrink:0}}>
               <span style={{position:"absolute",top:3,
                 left:darkMode?19:3,width:20,height:20,borderRadius:"50%",background:"#fff",
+                transition:"left .2s",display:"block"}}></span>
+            </button>
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <i className="ph-duotone ph-eye-slash" style={{fontSize:20,color:"var(--ink-soft)"}}></i>
+              <div>
+                <div style={{fontSize:15,fontWeight:600}}>預設隱藏淨資產</div>
+                <div style={{fontSize:12,color:"var(--ink-soft)",marginTop:2}}>開啟app時自動遮蓋，仍可手動切換</div>
+              </div>
+            </div>
+            <button type="button" onClick={()=>{
+              const next = !defaultMasked;
+              setDefaultMasked(next);
+              try{ localStorage.setItem("grove_default_masked", String(next)); }catch(e){}
+            }}
+              style={{width:44,height:26,borderRadius:13,border:"none",
+                background:defaultMasked?"var(--income)":"var(--line)",
+                position:"relative",transition:"background .2s",flexShrink:0}}>
+              <span style={{position:"absolute",top:3,
+                left:defaultMasked?19:3,width:20,height:20,borderRadius:"50%",background:"#fff",
                 transition:"left .2s",display:"block"}}></span>
             </button>
           </div>
@@ -3553,7 +3577,10 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
   onAddInvestment, onEditInvestment, onDeleteInvestment,
   onAddSubscription, onEditSubscription, onDeleteSubscription}){
   const [mode, setMode] = useState("account");
-  const [masked, setMasked] = useState(true);
+  const [masked, setMasked] = useState(()=>{
+    try{ return localStorage.getItem("grove_default_masked")!=="false"; }
+    catch(e){ return true; }
+  });
 
   const acctAssets = accounts.filter(a=>!isLiability(a.type)&&!isExcluded(a)).reduce((s,a)=>s+accountBalance(a,transactions),0);
   const liabilities = accounts.filter(a=>isLiability(a.type)&&!isExcluded(a)).reduce((s,a)=>s+accountBalance(a,transactions),0);
