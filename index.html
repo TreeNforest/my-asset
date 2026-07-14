@@ -177,6 +177,13 @@
     font-size:15px;color:var(--ink-soft);pointer-events:none;}
   .search-bar-wrap .search-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);
     background:none;border:none;font-size:15px;color:var(--ink-soft);padding:4px;}
+  .autocomplete-wrap{position:relative;}
+  .autocomplete-list{position:absolute;top:100%;left:0;right:0;z-index:50;
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    margin-top:3px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.12);}
+  .autocomplete-item{padding:11px 14px;font-size:14px;cursor:pointer;border-bottom:1px solid var(--line);}
+  .autocomplete-item:last-child{border-bottom:none;}
+  .autocomplete-item:active{background:var(--field-bg);}
   .day-group-header{font-size:13px;color:var(--ink-soft);font-weight:400;margin:14px 0 6px;}
 
   .bottom-nav{position:fixed;left:0;right:0;bottom:0;background:var(--surface);
@@ -1387,7 +1394,7 @@ function CalcInput({value, onChange}){
   );
 }
 
-function AddTxModal({categories, accounts, initial, onSave, onDelete, onClose}){
+function AddTxModal({categories, accounts, allTransactions, initial, onSave, onDelete, onClose}){
   const [type, setType] = useState((initial&&initial.type)||"expense");
   const [amount, setAmount] = useState(initial?String(initial.amount):"");
   const [categoryId, setCategoryId] = useState((initial&&initial.categoryId)||"");
@@ -1414,6 +1421,18 @@ function AddTxModal({categories, accounts, initial, onSave, onDelete, onClose}){
 
   const counterpartLabel = type==="expense" ? "付給（對象）" : "收自（對象）";
   const counterpartPlaceholder = type==="expense" ? "例如：全家、Sukiya" : "例如：公司、朋友名字";
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const allCounterparts = useMemo(()=>{
+    const pool = allTransactions || [];
+    const seen = new Set();
+    pool.filter(t=>t.counterpart&&t.type===type).forEach(t=>seen.add(t.counterpart.trim()));
+    return Array.from(seen).sort();
+  }, [allTransactions, type]);
+
+  const filteredSuggestions = counterpart.trim()
+    ? allCounterparts.filter(s=>s.toLowerCase().includes(counterpart.toLowerCase()) && s!==counterpart)
+    : allCounterparts.slice(0,8);
 
   return (
     <div className="sheet-overlay" onClick={onClose}>
@@ -1450,7 +1469,23 @@ function AddTxModal({categories, accounts, initial, onSave, onDelete, onClose}){
         </div>
         <div className="field">
           <label>{counterpartLabel}</label>
-          <input type="text" value={counterpart} onChange={e=>setCounterpart(e.target.value)} placeholder={counterpartPlaceholder} />
+          <div className="autocomplete-wrap">
+            <input type="text" value={counterpart}
+              onChange={e=>{ setCounterpart(e.target.value); setShowSuggestions(true); }}
+              onFocus={()=>setShowSuggestions(true)}
+              onBlur={()=>setTimeout(()=>setShowSuggestions(false), 150)}
+              placeholder={counterpartPlaceholder} />
+            {showSuggestions && filteredSuggestions.length>0 &&
+              <div className="autocomplete-list">
+                {filteredSuggestions.map((s,i)=>(
+                  <div key={i} className="autocomplete-item"
+                    onMouseDown={()=>{ setCounterpart(s); setShowSuggestions(false); }}>
+                    {s}
+                  </div>
+                ))}
+              </div>
+            }
+          </div>
         </div>
         <div className="field">
           <label>日期</label>
@@ -4012,7 +4047,7 @@ function App(){
           }} />
       }
       {showAdd && addKind==="txn" &&
-        <AddTxModal categories={categories} accounts={accounts}
+        <AddTxModal categories={categories} accounts={accounts} allTransactions={transactions}
           initial={editingTx ? editingTx : ((presetDate||presetType) ? {date:presetDate, type:presetType} : null)}
           onSave={saveTx} onDelete={deleteTx}
           onClose={closeAddModals} />
