@@ -76,6 +76,12 @@
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   @font-face{font-family:'CreamFont';src:url('./creamfont-3.3.otf') format('opentype');font-display:swap;font-style:normal;font-weight:normal;}
+  @font-face{font-family:'RixingSong';src:url('./rixingsong-1.0-semibold.otf') format('opentype');font-display:swap;font-style:normal;font-weight:normal;}
+  html[data-font="cream"]   body, html[data-font="cream"]   input, html[data-font="cream"]   select, html[data-font="cream"]   button, html[data-font="cream"]   textarea { font-family:'CreamFont',-apple-system,"PingFang TC","Noto Sans TC",sans-serif; }
+  html[data-font="rixing"]  body, html[data-font="rixing"]  input, html[data-font="rixing"]  select, html[data-font="rixing"]  button, html[data-font="rixing"]  textarea { font-family:'RixingSong',-apple-system,"PingFang TC","Noto Sans TC",sans-serif; }
+  html[data-font="lxgw"]    body, html[data-font="lxgw"]    input, html[data-font="lxgw"]    select, html[data-font="lxgw"]    button, html[data-font="lxgw"]    textarea { font-family:'LXGW WenKai TC',-apple-system,"PingFang TC",sans-serif; }
+  html[data-font="noto"]    body, html[data-font="noto"]    input, html[data-font="noto"]    select, html[data-font="noto"]    button, html[data-font="noto"]    textarea { font-family:'Noto Serif TC',-apple-system,"PingFang TC",sans-serif; }
+  html[data-font="system"]  body, html[data-font="system"]  input, html[data-font="system"]  select, html[data-font="system"]  button, html[data-font="system"]  textarea { font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif; }
   html,body{margin:0;padding:0;background-color:var(--bg);color:var(--ink);
     font-family:'CreamFont',-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
     font-style:normal;font-weight:400;
@@ -540,6 +546,9 @@
     padding:9px 16px;border-radius:10px;font-size:14px;z-index:40;}
 </style>
 <script src="https://unpkg.com/@phosphor-icons/web@2.1.1" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@300;400;700&family=Noto+Serif+TC:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <div id="root"></div>
@@ -552,6 +561,12 @@
     "react-dom/client":"https://esm.sh/react-dom@18.2.0/client"
   }
 }
+</script>
+<script>
+(function(){
+  var f = localStorage.getItem('grove_font')||'cream';
+  document.documentElement.setAttribute('data-font', f);
+})();
 </script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
 
@@ -3198,6 +3213,23 @@ function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
   const [defaultMasked, setDefaultMasked] = useState(()=>{
     try{ return localStorage.getItem("grove_default_masked")!=="false"; }catch(e){ return true; }
   });
+  const [currentFont, setCurrentFont] = useState(()=>{
+    try{ return localStorage.getItem("grove_font")||"cream"; }catch(e){ return "cream"; }
+  });
+
+  const FONTS = [
+    {key:"cream",  label:"CreamFont",    desc:"暖系手寫感，原版預設"},
+    {key:"rixing", label:"日星宋體",       desc:"傳統印刷宋體，溫潤典雅"},
+    {key:"lxgw",   label:"霞鶩文楷 TC",   desc:"楷書手寫風格，自然清雅"},
+    {key:"noto",   label:"Noto Serif TC", desc:"思源宋體，字型清晰工整"},
+    {key:"system", label:"系統預設字體",   desc:"跟隨裝置原生字型"},
+  ];
+
+  function applyFont(key){
+    setCurrentFont(key);
+    try{ localStorage.setItem("grove_font", key); }catch(e){}
+    document.documentElement.setAttribute("data-font", key);
+  }
   const [lightboxIdx, setLightboxIdx] = useState(null);
   const [lightboxImgs, setLightboxImgs] = useState([]);
 
@@ -3318,6 +3350,31 @@ function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
                 transition:"left .2s",display:"block"}}></span>
             </button>
           </div>
+        </div>
+
+        {/* 字型 */}
+        <div className="sfp-section" style={{marginBottom:12}}>
+          <h3>字型</h3>
+          {FONTS.map(f=>(
+            <div key={f.key}
+              onClick={()=>applyFont(f.key)}
+              style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+                padding:"11px 0",borderBottom:"1px solid var(--line)",cursor:"pointer"}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:600,fontFamily:
+                  f.key==="cream"?"'CreamFont',sans-serif":
+                  f.key==="rixing"?"'RixingSong',sans-serif":
+                  f.key==="lxgw"?"'LXGW WenKai TC',sans-serif":
+                  f.key==="noto"?"'Noto Serif TC',sans-serif":
+                  "-apple-system,sans-serif"
+                }}>{f.label}</div>
+                <div style={{fontSize:12,color:"var(--ink-soft)",marginTop:2}}>{f.desc}</div>
+              </div>
+              {currentFont===f.key &&
+                <i className="ph ph-check-circle" style={{fontSize:20,color:"var(--income)",flexShrink:0}}></i>
+              }
+            </div>
+          ))}
         </div>
 
         {/* 分類管理 */}
