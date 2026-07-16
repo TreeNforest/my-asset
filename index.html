@@ -1469,7 +1469,7 @@ function AddTxModal({categories, accounts, allTransactions, initial, onSave, onD
               const group = accounts.filter(a=>a.type===t.key);
               if(group.length===0) return null;
               return (
-                <optgroup key={t.key} label={t.icon+" "+t.label}>
+                <optgroup key={t.key} label={(isPhIcon(t.icon||"")?"▪":t.icon||"")+" "+t.label}>
                   {group.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
                 </optgroup>
               );
@@ -1555,7 +1555,7 @@ function accountSelectGroups(accounts){
     const group = accounts.filter(a=>a.type===t.key);
     if(group.length===0) return null;
     return (
-      <optgroup key={t.key} label={t.icon+" "+t.label}>
+      <optgroup key={t.key} label={(isPhIcon(t.icon||"")?"▪":t.icon||"")+" "+t.label}>
         {group.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
       </optgroup>
     );
@@ -1863,7 +1863,7 @@ function AccountModal({initial, defaultType, accounts, onSave, onClose}){
         <div className="field">
           <label>類型</label>
           <select value={type} onChange={e=>setType(e.target.value)}>
-            {ACCOUNT_TYPES.map(t=><option key={t.key} value={t.key}>{t.icon} {t.label}</option>)}
+            {ACCOUNT_TYPES.map(t=><option key={t.key} value={t.key}>{isPhIcon(t.icon||"")?"▪":(t.icon||"")} {t.label}</option>)}
           </select>
         </div>
         <div className="field">
@@ -1922,7 +1922,7 @@ function AccountModal({initial, defaultType, accounts, onSave, onClose}){
                   const group = nonFixedAccounts.filter(a=>a.type===t.key);
                   if(group.length===0) return null;
                   return (
-                    <optgroup key={t.key} label={t.icon+" "+t.label}>
+                    <optgroup key={t.key} label={(isPhIcon(t.icon||"")?"▪":t.icon||"")+" "+t.label}>
                       {group.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
                     </optgroup>
                   );
@@ -3096,7 +3096,7 @@ function AccountsSection({accounts, transactions, categories, onViewTx, onAddAcc
         return (
           <div className="acc-section" key={t.key}>
             <div className="acc-section-title">
-              <h3>{t.icon} {t.label}</h3>
+              <h3>{renderCatIcon(t.icon,16)} {t.label}</h3>
               <button onClick={()=>setModal({defaultType:t.key})}>＋ 新增{t.label}</button>
             </div>
             {group.length===0 && <div className="empty-hint">還沒有{t.label}帳戶</div>}
@@ -3477,7 +3477,7 @@ function SubscriptionModal({initial, categories, accounts, onSave, onDelete, onC
             {ACCOUNT_TYPES.map(t=>{
               const group = accounts.filter(a=>a.type===t.key);
               if(!group.length) return null;
-              return <optgroup key={t.key} label={t.icon+" "+t.label}>
+              return <optgroup key={t.key} label={(isPhIcon(t.icon||"")?"▪":t.icon||"")+" "+t.label}>
                 {group.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
               </optgroup>;
             })}
