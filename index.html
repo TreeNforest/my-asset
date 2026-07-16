@@ -747,10 +747,10 @@ function groupByDate(transactions){
 }
 
 const ACCOUNT_TYPES = [
-  {key:"wallet", label:"錢包", icon:"👛"},
-  {key:"checking", label:"活存", icon:"🏦"},
-  {key:"credit", label:"信用", icon:"💳"},
-  {key:"fixed", label:"定存", icon:"🔐"},
+  {key:"wallet", label:"錢包", icon:"ph-coins"},
+  {key:"checking", label:"活存", icon:"ph-bank"},
+  {key:"credit", label:"信用", icon:"ph-credit-card"},
+  {key:"fixed", label:"定存", icon:"ph-vault"},
 ];
 function accTypeInfo(key){return ACCOUNT_TYPES.find(t=>t.key===key) || ACCOUNT_TYPES[0];}
 function isLiability(type){return type==="credit";}
@@ -1874,7 +1874,7 @@ function AccountModal({initial, defaultType, accounts, onSave, onClose}){
           <label>圖示</label>
           <div style={{display:"flex", alignItems:"center", gap:10}}>
             <div className={"acc-icon"+(type==="credit"?" card-shape":"")} style={type==="credit"?{}:{width:40,height:40}}>
-              {iconImage ? <img src={iconImage} alt="" style={{width:"100%",height:"100%",borderRadius:type==="credit"?5:"50%",objectFit:"cover"}} /> : icon}
+              {iconImage ? <img src={iconImage} alt="" style={{width:"100%",height:"100%",borderRadius:type==="credit"?5:"50%",objectFit:"cover"}} /> : renderCatIcon(icon,22)}
             </div>
             <input type="text" value={icon} onChange={e=>setIcon(e.target.value)} placeholder="emoji" style={{flex:1}} />
           </div>
@@ -2231,7 +2231,7 @@ function StatsFullPage({categories, accounts, allMonthTx, defaultViewType, onClo
                 <tr key={acc.id}>
                   <td>
                     <span className="acc-icon-sm">
-                      {acc.iconImage?<img src={acc.iconImage} alt=""/>:(acc.icon||"💰")}
+                      {acc.iconImage?<img src={acc.iconImage} alt=""/>:renderCatIcon(acc.icon||"💰",20)}
                     </span>
                     {acc.name.length>5?acc.name.slice(0,5)+"…":acc.name}
                   </td>
@@ -2961,7 +2961,7 @@ function AccountRow({acc, transactions, dragHandlers, onView, onEdit, onDelete})
       <span className="drag-handle" {...dragHandlers}>≡</span>
       <div className="acc-row-main" onClick={()=>onView(acc)}>
         <div className={"acc-icon"+(acc.type==="credit"?" card-shape":"")}>
-          {acc.iconImage ? <img src={acc.iconImage} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : (acc.icon||"💰")}
+          {acc.iconImage ? <img src={acc.iconImage} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : renderCatIcon(acc.icon||"💰",20)}
         </div>
         <div className="acc-name-wrap">
           <span className="name">{acc.name}</span>
