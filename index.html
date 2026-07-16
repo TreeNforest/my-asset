@@ -445,6 +445,23 @@
   .sub-amount{font-size:15px;font-weight:700;text-align:right;white-space:nowrap;}
   .sub-cycle-badge{font-size:11px;color:var(--ink-soft);background:var(--field-bg);
     border-radius:6px;padding:2px 6px;}
+  .wish-row{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:12px;
+    padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 2px rgba(60,50,40,.05);}
+  .wish-row.purchased{opacity:0.5;}
+  .wish-check{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;}
+  .wish-check.done{background:var(--income);border-color:var(--income);color:#fff;}
+  .wish-info{flex:1;min-width:0;}
+  .wish-info .name{font-size:15px;font-weight:600;}
+  .wish-info .name.strike{text-decoration:line-through;color:var(--ink-soft);}
+  .wish-info .meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .wish-price{font-size:15px;font-weight:700;color:var(--ink);white-space:nowrap;}
+  .wish-priority{font-size:11px;padding:2px 7px;border-radius:6px;font-weight:600;}
+  .wish-priority.high{background:#FFE0D0;color:#C04010;}
+  .wish-priority.mid{background:#FFF4C0;color:#8A6000;}
+  .wish-priority.low{background:var(--field-bg);color:var(--ink-soft);}
+  html.dark .wish-priority.high{background:#3A1A10;color:#E07050;}
+  html.dark .wish-priority.mid{background:#2A2000;color:#C0A000;}
 
   .networth-card{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:18px;
     box-shadow:0 1px 3px rgba(60,50,40,.06);}
@@ -3399,6 +3416,143 @@ function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
   );
 }
 
+const PRIORITY_LABELS = {high:"高", mid:"中", low:"低"};
+
+function WishlistModal({initial, onSave, onClose}){
+  const [name, setName] = useState((initial&&initial.name)||"");
+  const [price, setPrice] = useState(initial?String(initial.price||""):"");
+  const [priority, setPriority] = useState((initial&&initial.priority)||"mid");
+  const [note, setNote] = useState((initial&&initial.note)||"");
+  const [url, setUrl] = useState((initial&&initial.url)||"");
+
+  function submit(){
+    if(!name.trim()){ alert("請輸入品項名稱"); return; }
+    onSave({name:name.trim(), price:parseFloat(price)||0, priority, note, url,
+      purchased:initial?initial.purchased:false});
+  }
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>{initial?"編輯品項":"新增願望品項"}</h2>
+        <div className="field">
+          <label>品項名稱</label>
+          <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="例如：AirPods、新球鞋" />
+        </div>
+        <div className="field">
+          <label>預估價格（選填）</label>
+          <input type="number" inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value)} placeholder="0" />
+        </div>
+        <div className="field">
+          <label>優先度</label>
+          <div style={{display:"flex",gap:8}}>
+            {["high","mid","low"].map(p=>(
+              <button key={p} type="button"
+                onClick={()=>setPriority(p)}
+                className={"wish-priority "+p}
+                style={{flex:1,padding:"9px",border:"2px solid",fontSize:14,fontWeight:700,
+                  borderColor:priority===p?"currentColor":"transparent"}}>
+                {PRIORITY_LABELS[p]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field">
+          <label>連結（選填）</label>
+          <input type="url" value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://..." />
+        </div>
+        <div className="field">
+          <label>備註（選填）</label>
+          <input type="text" value={note} onChange={e=>setNote(e.target.value)} placeholder="顏色、尺寸等細節" />
+        </div>
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WishlistSection({wishlists, onAdd, onEdit, onDelete}){
+  const [modal, setModal] = useState(null);
+  const [showPurchased, setShowPurchased] = useState(false);
+
+  const unpurchased = wishlists.filter(w=>!w.purchased).sort((a,b)=>{
+    const order={high:0,mid:1,low:2};
+    return (order[a.priority]||1)-(order[b.priority]||1);
+  });
+  const purchased = wishlists.filter(w=>w.purchased);
+  const totalEst = unpurchased.reduce((s,w)=>s+(w.price||0),0);
+
+  return (
+    <div>
+      {wishlists.length>0 &&
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+          background:"var(--surface)",borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+          <span style={{fontSize:13,color:"var(--ink-soft)"}}>待購預估總額</span>
+          <span style={{fontSize:16,fontWeight:700}}>{fmtMoney(totalEst)}</span>
+        </div>
+      }
+      {unpurchased.length===0 && <div className="empty-hint">願望清單是空的，快加入第一個品項！</div>}
+      {unpurchased.map(w=>(
+        <div className="wish-row" key={w.id}>
+          <div className={"wish-check"+(w.purchased?" done":"")}
+            onClick={()=>onEdit(w.id,{...w,purchased:!w.purchased})}>
+            {w.purchased && <i className="ph ph-check" style={{fontSize:14}}></i>}
+          </div>
+          <div className="wish-info" onClick={()=>setModal({initial:w})} style={{cursor:"pointer"}}>
+            <div className="name">{w.name}</div>
+            {w.note && <div className="meta">{w.note}</div>}
+          </div>
+          {w.priority && w.priority!=="mid" &&
+            <span className={"wish-priority "+w.priority}>{PRIORITY_LABELS[w.priority]}</span>
+          }
+          {w.price>0 && <span className="wish-price">{fmtMoney(w.price)}</span>}
+        </div>
+      ))}
+
+      {purchased.length>0 &&
+        <button className="btn ghost" style={{width:"100%",marginTop:4,marginBottom:8,fontSize:13}}
+          onClick={()=>setShowPurchased(v=>!v)}>
+          {showPurchased?"▲ 隱藏":"▼ 顯示"} 已購買 ({purchased.length})
+        </button>
+      }
+      {showPurchased && purchased.map(w=>(
+        <div className="wish-row purchased" key={w.id}>
+          <div className="wish-check done" onClick={()=>onEdit(w.id,{...w,purchased:false})}>
+            <i className="ph ph-check" style={{fontSize:14}}></i>
+          </div>
+          <div className="wish-info" onClick={()=>setModal({initial:w})} style={{cursor:"pointer"}}>
+            <div className="name strike">{w.name}</div>
+          </div>
+          {w.price>0 && <span className="wish-price" style={{color:"var(--ink-soft)"}}>{fmtMoney(w.price)}</span>}
+        </div>
+      ))}
+
+      <button className="btn primary" style={{width:"100%",marginTop:8}}
+        onClick={()=>setModal({initial:null})}>＋ 新增品項</button>
+
+      {modal &&
+        <WishlistModal initial={modal.initial}
+          onClose={()=>setModal(null)}
+          onSave={async data=>{
+            if(modal.initial) await onEdit(modal.initial.id, data);
+            else await onAdd(data);
+            setModal(null);
+          }} />
+      }
+      {modal && modal.initial &&
+        <button className="btn danger" style={{width:"100%",marginTop:8}}
+          onClick={async()=>{ if(confirm("確定刪除？")) { await onDelete(modal.initial.id); setModal(null); } }}>
+          刪除此品項
+        </button>
+      }
+    </div>
+  );
+}
+
 const CYCLE_LABELS = {monthly:"每月", yearly:"每年", weekly:"每週", quarterly:"每季"};
 
 function SubscriptionModal({initial, categories, accounts, onSave, onDelete, onClose}){
@@ -3628,11 +3782,12 @@ function SubscriptionsSection({subscriptions, categories, accounts, transactions
   );
 }
 
-function SettingsTab({categories, accounts, transactions, investments, subscriptions, onViewTx,
+function SettingsTab({categories, accounts, transactions, investments, subscriptions, wishlists, onViewTx,
   onAddCategory, onEditCategory, onDeleteCategory, onReorderCategoryGroup, onRecolorAll,
   onAddAccount, onEditAccount, onDeleteAccount, onReorderGroup,
   onAddInvestment, onEditInvestment, onDeleteInvestment,
-  onAddSubscription, onEditSubscription, onDeleteSubscription}){
+  onAddSubscription, onEditSubscription, onDeleteSubscription,
+  onAddWishlist, onEditWishlist, onDeleteWishlist}){
   const [mode, setMode] = useState("account");
   const [masked, setMasked] = useState(()=>{
     try{ return localStorage.getItem("grove_default_masked")!=="false"; }
@@ -3679,6 +3834,7 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
         <button className={mode==="account"?"active":""} onClick={()=>setMode("account")}>帳戶</button>
         <button className={mode==="subscription"?"active":""} onClick={()=>setMode("subscription")}>訂閱</button>
         <button className={mode==="invest"?"active":""} onClick={()=>setMode("invest")}>投資</button>
+        <button className={mode==="wish"?"active":""} onClick={()=>setMode("wish")}>願望</button>
       </div>
       {mode==="account" &&
         <AccountsSection accounts={accounts} transactions={transactions} categories={categories} onViewTx={onViewTx}
@@ -3693,6 +3849,10 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
         <InvestmentsSection investments={investments}
           onAddInvestment={onAddInvestment} onEditInvestment={onEditInvestment} onDeleteInvestment={onDeleteInvestment} />
       }
+      {mode==="wish" &&
+        <WishlistSection wishlists={wishlists||[]}
+          onAdd={onAddWishlist} onEdit={onEditWishlist} onDelete={onDeleteWishlist} />
+      }
     </div>
   );
 }
@@ -3705,6 +3865,7 @@ function App(){
   const [accounts, setAccounts] = useState([]);
   const [investments, setInvestments] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
+  const [wishlists, setWishlists] = useState([]);
   const [tab, setTab] = useState("home");
   const [homeMode, setHomeMode] = useState("list");
   const [cursorMonth, setCursorMonth] = useState(()=>{const d=new Date(); d.setDate(1); return d;});
@@ -3784,6 +3945,13 @@ function App(){
   useEffect(()=>{
     const unsub = onSnapshot(collection(db,"subscriptions"), snap=>{
       setSubscriptions(snap.docs.map(d=>({id:d.id, ...d.data()})));
+    });
+    return unsub;
+  }, []);
+
+  useEffect(()=>{
+    const unsub = onSnapshot(collection(db,"wishlists"), snap=>{
+      setWishlists(snap.docs.map(d=>({id:d.id, ...d.data()})));
     });
     return unsub;
   }, []);
@@ -4026,6 +4194,9 @@ function App(){
   async function addSubscription(data){ await addDoc(collection(db,"subscriptions"), data); }
   async function editSubscription(id, data){ await updateDoc(doc(db,"subscriptions",id), data); }
   async function deleteSubscription(id){ await deleteDoc(doc(db,"subscriptions",id)); }
+  async function addWishlist(data){ await addDoc(collection(db,"wishlists"), {...data, createdAt:Date.now()}); }
+  async function editWishlist(id, data){ await updateDoc(doc(db,"wishlists",id), data); }
+  async function deleteWishlist(id){ await deleteDoc(doc(db,"wishlists",id)); }
 
   const showMonthSwitcher = tab==="home" && (homeMode==="calendar" || homeRangeMode==="month");
   const showDateRangeRow = tab==="home" && homeMode==="list" && homeRangeMode==="custom";
@@ -4084,7 +4255,8 @@ function App(){
             onAddAccount={addAccount} onEditAccount={editAccount} onDeleteAccount={deleteAccount}
             onReorderGroup={reorderAccountGroup}
             onAddInvestment={addInvestment} onEditInvestment={editInvestment} onDeleteInvestment={deleteInvestment}
-            onAddSubscription={addSubscription} onEditSubscription={editSubscription} onDeleteSubscription={deleteSubscription} />
+            onAddSubscription={addSubscription} onEditSubscription={editSubscription} onDeleteSubscription={deleteSubscription}
+            wishlists={wishlists} onAddWishlist={addWishlist} onEditWishlist={editWishlist} onDeleteWishlist={deleteWishlist} />
         }
       </div>
 
