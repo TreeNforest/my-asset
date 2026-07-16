@@ -2850,8 +2850,8 @@ function CategoryActionSheet({node, onAddChild, onEdit, onDelete, onClose}){
         <h2>{renderCatIcon(node.icon,22)} {node.name}</h2>
         <div className="action-list">
           <button className="action-list-item" onClick={()=>{onClose(); onAddChild(node);}}>＋ 新增子分類</button>
-          <button className="action-list-item" onClick={()=>{onClose(); onEdit(node);}}>✏️ 編輯</button>
-          <button className="action-list-item danger" onClick={()=>{onClose(); onDelete(node);}}>🗑 刪除</button>
+          <button className="action-list-item" onClick={()=>{onClose(); onEdit(node);}}><i className="ph ph-pencil-line"></i> 編輯</button>
+          <button className="action-list-item danger" onClick={()=>{onClose(); onDelete(node);}}><i className="ph ph-trash"></i> 刪除</button>
         </div>
         <button className="btn ghost" style={{width:"100%"}} onClick={onClose}>取消</button>
       </div>
@@ -2970,8 +2970,8 @@ function AccountRow({acc, transactions, dragHandlers, onView, onEdit, onDelete})
         </div>
         <span className={"bal"+(neg?" neg":"")}>{fmtMoney(Math.abs(bal))}</span>
       </div>
-      <button className="icon-btn" onClick={()=>onEdit(acc)}>✏️</button>
-      <button className="icon-btn" onClick={()=>onDelete(acc)}>🗑</button>
+      <button className="icon-btn" onClick={()=>onEdit(acc)}><i className="ph ph-pencil-line"></i></button>
+      <button className="icon-btn" onClick={()=>onDelete(acc)}><i className="ph ph-trash"></i></button>
     </div>
   );
 }
@@ -3152,8 +3152,8 @@ function InvestmentRow({inv, onEdit, onDelete}){
         <div className="inv-detail-row"><span className="lbl">總配息</span><span className="val">{fmtMoney(inv.totalDividends||0)}</span></div>
       </div>
       <div className="inv-actions">
-        <button onClick={()=>onEdit(inv)}>✏️</button>
-        <button onClick={()=>onDelete(inv)}>🗑</button>
+        <button onClick={()=>onEdit(inv)}><i className="ph ph-pencil-line"></i></button>
+        <button onClick={()=>onDelete(inv)}><i className="ph ph-trash"></i></button>
       </div>
     </div>
   );
