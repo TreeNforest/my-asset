@@ -458,7 +458,7 @@
 
   .acc-section{margin-bottom:20px;}
   .acc-section-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
-  .acc-section-title h3{margin:0;font-size:15px;}
+  .acc-section-title h3{margin:0;font-size:17px;font-weight:700;display:flex;align-items:center;gap:6px;}
   .acc-section-title button{background:var(--accent);color:#fff;border:none;border-radius:8px;
     padding:6px 10px;font-size:13px;font-weight:600;}
   .acc-row{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:10px;
@@ -3096,7 +3096,7 @@ function AccountsSection({accounts, transactions, categories, onViewTx, onAddAcc
         return (
           <div className="acc-section" key={t.key}>
             <div className="acc-section-title">
-              <h3>{renderCatIcon(t.icon,16)} {t.label}</h3>
+              <h3>{renderCatIcon(t.icon,20)} {t.label}</h3>
               <button onClick={()=>setModal({defaultType:t.key})}>＋ 新增{t.label}</button>
             </div>
             {group.length===0 && <div className="empty-hint">還沒有{t.label}帳戶</div>}
