@@ -3475,8 +3475,9 @@ function WishlistModal({initial, onSave, onClose}){
   );
 }
 
-function WishlistSection({wishlists, onAdd, onEdit, onDelete}){
+function WishlistSection({wishlists, onAdd, onEdit, onDelete, categories, accounts, allTransactions, onSaveTx}){
   const [modal, setModal] = useState(null);
+  const [buyItem, setBuyItem] = useState(null);
   const [showPurchased, setShowPurchased] = useState(false);
 
   const unpurchased = wishlists.filter(w=>!w.purchased).sort((a,b)=>{
@@ -3498,18 +3499,26 @@ function WishlistSection({wishlists, onAdd, onEdit, onDelete}){
       {unpurchased.length===0 && <div className="empty-hint">願望清單是空的，快加入第一個品項！</div>}
       {unpurchased.map(w=>(
         <div className="wish-row" key={w.id}>
-          <div className={"wish-check"+(w.purchased?" done":"")}
-            onClick={()=>onEdit(w.id,{...w,purchased:!w.purchased})}>
-            {w.purchased && <i className="ph ph-check" style={{fontSize:14}}></i>}
-          </div>
-          <div className="wish-info" onClick={()=>setModal({initial:w})} style={{cursor:"pointer"}}>
+          <div className="wish-info" onClick={()=>setModal({initial:w})} style={{cursor:"pointer",flex:1}}>
             <div className="name">{w.name}</div>
             {w.note && <div className="meta">{w.note}</div>}
           </div>
           {w.priority && w.priority!=="mid" &&
             <span className={"wish-priority "+w.priority}>{PRIORITY_LABELS[w.priority]}</span>
           }
+          {w.url &&
+            <a href={w.url} target="_blank" rel="noopener noreferrer"
+              onClick={e=>e.stopPropagation()}
+              style={{color:"var(--accent)",fontSize:20,lineHeight:1,flexShrink:0}}>
+              <i className="ph ph-arrow-square-out"></i>
+            </a>
+          }
           {w.price>0 && <span className="wish-price">{fmtMoney(w.price)}</span>}
+          <button onClick={()=>setBuyItem(w)}
+            style={{background:"var(--income)",color:"#fff",border:"none",borderRadius:8,
+              padding:"6px 10px",fontSize:12,fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>
+            購買
+          </button>
         </div>
       ))}
 
@@ -3548,6 +3557,23 @@ function WishlistSection({wishlists, onAdd, onEdit, onDelete}){
           onClick={async()=>{ if(confirm("確定刪除？")) { await onDelete(modal.initial.id); setModal(null); } }}>
           刪除此品項
         </button>
+      }
+      {buyItem &&
+        <AddTxModal
+          categories={categories} accounts={accounts} allTransactions={allTransactions}
+          initial={{
+            type:"expense",
+            amount:buyItem.price||0,
+            note:buyItem.name,
+            date:toDateStr(new Date()),
+          }}
+          onSave={async(data)=>{
+            await onSaveTx(data);
+            await onDelete(buyItem.id);
+            setBuyItem(null);
+          }}
+          onDelete={()=>{}}
+          onClose={()=>setBuyItem(null)} />
       }
     </div>
   );
@@ -3787,7 +3813,7 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
   onAddAccount, onEditAccount, onDeleteAccount, onReorderGroup,
   onAddInvestment, onEditInvestment, onDeleteInvestment,
   onAddSubscription, onEditSubscription, onDeleteSubscription,
-  onAddWishlist, onEditWishlist, onDeleteWishlist}){
+  onAddWishlist, onEditWishlist, onDeleteWishlist, onAddTx}){
   const [mode, setMode] = useState("account");
   const [masked, setMasked] = useState(()=>{
     try{ return localStorage.getItem("grove_default_masked")!=="false"; }
@@ -3851,6 +3877,8 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
       }
       {mode==="wish" &&
         <WishlistSection wishlists={wishlists||[]}
+          categories={categories} accounts={accounts}
+          allTransactions={transactions} onSaveTx={onAddTx}
           onAdd={onAddWishlist} onEdit={onEditWishlist} onDelete={onDeleteWishlist} />
       }
     </div>
@@ -4256,7 +4284,8 @@ function App(){
             onReorderGroup={reorderAccountGroup}
             onAddInvestment={addInvestment} onEditInvestment={editInvestment} onDeleteInvestment={deleteInvestment}
             onAddSubscription={addSubscription} onEditSubscription={editSubscription} onDeleteSubscription={deleteSubscription}
-            wishlists={wishlists} onAddWishlist={addWishlist} onEditWishlist={editWishlist} onDeleteWishlist={deleteWishlist} />
+            wishlists={wishlists} onAddWishlist={addWishlist} onEditWishlist={editWishlist} onDeleteWishlist={deleteWishlist}
+            onAddTx={saveTx} />
         }
       </div>
 
