@@ -49,6 +49,8 @@
     --solid:#3A4F32;
     --field-bg:#F1F3EC;
     --ghost-bg:#E4E9DC;
+    --tw-up:#C0564A;
+    --tw-down:#4A7C3F;
   }
   html.dark{
     --bg:#0F1410;
@@ -64,6 +66,8 @@
     --warn:#C47272;
     --field-bg:#243020;
     --ghost-bg:#2C3C28;
+    --tw-up:#D98B7E;
+    --tw-down:#72B05A;
   }
   html.dark .tx-item,
   html.dark .acc-row,
@@ -531,33 +535,86 @@
   .acc-row .icon-btn{background:none;border:none;font-size:15px;color:var(--ink-soft);padding:4px;}
   .acc-row .drag-handle{font-size:17px;color:var(--ink-soft);padding:4px 2px;touch-action:none;cursor:grab;}
 
-  .inv-row{background:var(--surface);border-radius:12px;padding:14px;margin-bottom:8px;
-    box-shadow:0 1px 2px rgba(60,50,40,.05);}
-  .inv-row .inv-top{display:flex;justify-content:space-between;align-items:baseline;}
-  .inv-row .inv-name{font-size:15px;font-weight:700;}
-  .inv-row .inv-code{font-size:13px;color:var(--ink-soft);margin-left:4px;}
-  .inv-row .inv-shares{font-size:13px;color:var(--ink-soft);margin-top:2px;}
-  .inv-row .inv-pct{font-size:15px;font-weight:700;white-space:nowrap;}
-  .inv-row .inv-pct.pos{color:var(--income);}
-  .inv-row .inv-pct.neg{color:var(--expense);}
-  .inv-row .inv-detail{margin-top:8px;border-top:1px solid var(--line);padding-top:4px;}
-  .inv-row .inv-detail-row{display:flex;justify-content:space-between;font-size:14px;
-    padding:6px 0;border-bottom:1px solid var(--line);}
-  .inv-row .inv-detail-row:last-child{border-bottom:none;}
-  .inv-row .inv-detail-row .lbl{color:var(--ink-soft);}
-  .inv-row .inv-detail-row .val{font-weight:600;}
-  .inv-row .inv-gain.pos{color:var(--income);}
-  .inv-row .inv-gain.neg{color:var(--expense);}
-  .inv-row .inv-actions{display:flex;justify-content:flex-end;gap:4px;margin-top:4px;}
-  .inv-row .inv-actions button{background:none;border:none;font-size:15px;color:var(--ink-soft);padding:4px;}
+  /* 台股漲跌：賺紅賠綠 */
+  .tw-up{color:var(--tw-up);}
+  .tw-down{color:var(--tw-down);}
+
+  .inv-card{background:var(--surface);border-radius:14px;margin-bottom:10px;
+    box-shadow:0 1px 2px rgba(60,50,40,.05);overflow:hidden;}
+  html.dark .inv-card{border:1px solid #2C3C28;}
+  .inv-card .ic-head{display:flex;justify-content:space-between;align-items:flex-start;
+    padding:14px 14px 12px;cursor:pointer;gap:10px;}
+  .inv-card .ic-title{min-width:0;}
+  .inv-card .ic-name{font-size:16px;font-weight:700;line-height:1.2;}
+  .inv-card .ic-code{font-size:12px;color:var(--ink-soft);margin-left:6px;font-weight:400;}
+  .inv-card .ic-shares{font-size:12px;color:var(--ink-soft);margin-top:3px;}
+  .inv-card .ic-gain{text-align:right;white-space:nowrap;flex-shrink:0;}
+  .inv-card .ic-gain .g-amt{font-size:17px;font-weight:700;}
+  .inv-card .ic-gain .g-pct{font-size:12px;font-weight:600;margin-top:1px;}
+  .inv-card .ic-chev{color:var(--ink-soft);font-size:12px;margin-left:2px;transition:transform .2s;}
+  .inv-card.open .ic-chev{transform:rotate(180deg);}
+
+  .inv-card .ic-metrics{display:grid;grid-template-columns:1fr 1fr;gap:1px;
+    background:var(--line);border-top:1px solid var(--line);}
+  .inv-card .ic-metric{background:var(--surface);padding:10px 14px;}
+  .inv-card .ic-metric .m-lbl{font-size:11px;color:var(--ink-soft);}
+  .inv-card .ic-metric .m-val{font-size:15px;font-weight:700;margin-top:2px;}
+  .inv-card .ic-price{grid-column:1 / -1;display:flex;justify-content:space-between;align-items:center;
+    background:var(--field-bg);padding:11px 14px;cursor:pointer;}
+  .inv-card .ic-price .p-lbl{font-size:12px;color:var(--ink-soft);display:flex;align-items:center;gap:5px;}
+  .inv-card .ic-price .p-val{font-size:16px;font-weight:700;display:flex;align-items:center;gap:6px;}
+  .inv-card .ic-price .p-val .ph{font-size:14px;color:var(--accent);}
+
+  .lot-list{padding:6px 14px 4px;}
+  .lot-list .lot-hd{display:flex;justify-content:space-between;align-items:center;
+    font-size:12px;color:var(--ink-soft);padding:6px 0 8px;}
+  .lot-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);}
+  .lot-item .lot-date{font-size:13px;font-weight:600;width:44px;flex-shrink:0;}
+  .lot-item .lot-mid{flex:1;min-width:0;}
+  .lot-item .lot-line1{font-size:13px;}
+  .lot-item .lot-line1 b{font-weight:700;}
+  .lot-item .lot-line2{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+  .lot-item .lot-gain{text-align:right;font-size:13px;font-weight:700;white-space:nowrap;}
+  .lot-item .lot-gain .lg-pct{font-size:11px;font-weight:600;}
+  .lot-badge{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;border-radius:6px;
+    margin-right:5px;vertical-align:middle;}
+  .lot-badge.spot{background:var(--income-soft);color:var(--income);}
+  .lot-badge.fixed{background:#D9E4EC;color:#4A6E8A;}
+  html.dark .lot-badge.fixed{background:#1C2C38;color:#7FA8C8;}
+  .lot-del{background:none;border:none;color:var(--ink-soft);padding:4px;font-size:14px;flex-shrink:0;}
+
+  .ic-foot{display:flex;gap:8px;padding:10px 14px 14px;}
+  .ic-foot button{flex:1;border:1px solid var(--line);background:var(--field-bg);color:var(--ink);
+    border-radius:10px;padding:9px;font-size:13px;font-weight:600;display:flex;align-items:center;
+    justify-content:center;gap:5px;}
+  .ic-foot button.addlot{background:var(--income-soft);border-color:transparent;color:var(--income);}
 
   .inv-summary{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:14px;
     box-shadow:0 1px 3px rgba(60,50,40,.06);}
+  html.dark .inv-summary{border:1px solid #2C3C28;}
+  .inv-summary .is-hero{text-align:center;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:10px;}
+  .inv-summary .is-hero .h-lbl{font-size:12px;color:var(--ink-soft);}
+  .inv-summary .is-hero .h-amt{font-size:28px;font-weight:700;margin-top:2px;}
+  .inv-summary .is-hero .h-pct{font-size:14px;font-weight:600;margin-top:2px;}
   .inv-summary .row{display:flex;justify-content:space-between;font-size:14px;padding:5px 0;}
   .inv-summary .row .lbl{color:var(--ink-soft);}
   .inv-summary .row .val{font-weight:700;}
-  .inv-summary .row .val.pos{color:var(--income);}
-  .inv-summary .row .val.neg{color:var(--expense);}
+
+  /* lot 編輯器（modal 內） */
+  .lot-editor{margin-top:4px;}
+  .lot-edit-row{background:var(--field-bg);border-radius:10px;padding:10px;margin-bottom:8px;}
+  .lot-edit-row .ler-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .lot-edit-row .ler-top .ler-n{font-size:12px;color:var(--ink-soft);font-weight:600;}
+  .lot-edit-row .ler-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .lot-edit-row .ler-grid .fld label{font-size:11px;color:var(--ink-soft);display:block;margin-bottom:3px;}
+  .lot-edit-row .ler-grid .fld input{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;
+    background:var(--surface);color:var(--ink);font-size:14px;font-family:inherit;}
+  .lot-edit-row .ler-kind{display:flex;gap:6px;margin-top:8px;}
+  .lot-edit-row .ler-kind button{flex:1;padding:7px;border:1px solid var(--line);border-radius:8px;
+    background:var(--surface);color:var(--ink-soft);font-size:12px;font-weight:600;font-family:inherit;}
+  .lot-edit-row .ler-kind button.on{background:var(--income-soft);border-color:transparent;color:var(--income);}
+  .lot-add-btn{width:100%;padding:11px;border:1px dashed var(--line);border-radius:10px;
+    background:none;color:var(--accent);font-size:14px;font-weight:600;font-family:inherit;margin-top:2px;}
 
   .top-msg{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--solid);color:#fff;
     padding:9px 16px;border-radius:10px;font-size:14px;z-index:40;}
@@ -825,9 +882,28 @@ function accountBalance(acc, transactions){
   return bal;
 }
 
-function invMarketValue(inv){ return (inv.shares||0) * (inv.currentPrice||0); }
-function invCostBasis(inv){ return (inv.shares||0) * (inv.avgCost||0); }
-function invGain(inv){ return invMarketValue(inv) - invCostBasis(inv); }
+/* 國泰單筆手續費（可在每筆買進調整） */
+const DEFAULT_FEE = 1;
+/* 取得正規化的分筆買進清單；相容舊資料（把整包 shares/avgCost 當成一筆） */
+function invLots(inv){
+  if(Array.isArray(inv.lots) && inv.lots.length) return inv.lots;
+  if(inv.shares){
+    return [{ id:"legacy", date: inv.updatedAt||toDateStr(new Date()),
+      shares:+inv.shares||0, price:+inv.avgCost||0, fee:0, kind:"spot" }];
+  }
+  return [];
+}
+function lotCost(l){ return (+l.shares||0)*(+l.price||0) + (+l.fee||0); }
+function lotValue(l, price){ return (+l.shares||0)*(+price||0); }
+function lotGain(l, price){ return lotValue(l, price) - lotCost(l); }
+function lotPct(l, price){ const c=lotCost(l); return c>0 ? lotGain(l,price)/c*100 : 0; }
+
+function invTotalShares(inv){ return invLots(inv).reduce((s,l)=>s+(+l.shares||0),0); }
+function invCostBasis(inv){ return invLots(inv).reduce((s,l)=>s+lotCost(l),0); }
+function invAvgCost(inv){ const sh=invTotalShares(inv); return sh>0 ? invCostBasis(inv)/sh : 0; }
+function invMarketValue(inv){ return invTotalShares(inv) * (+inv.currentPrice||0); }
+/* 損益含息，與券商一致 */
+function invGain(inv){ return invMarketValue(inv) - invCostBasis(inv) + (+inv.totalDividends||0); }
 function invReturnPct(inv){
   const cost = invCostBasis(inv);
   return cost>0 ? (invGain(inv)/cost*100) : 0;
@@ -1985,22 +2061,50 @@ function AccountModal({initial, defaultType, accounts, onSave, onClose}){
   );
 }
 
-function InvestmentModal({initial, onSave, onClose}){
+function newLot(){
+  return { id:"L"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    date:toDateStr(new Date()), shares:"", price:"", fee:String(DEFAULT_FEE), kind:"spot" };
+}
+function InvestmentModal({initial, addLot, onSave, onClose}){
   const [symbol, setSymbol] = useState((initial&&initial.symbol)||"");
   const [name, setName] = useState((initial&&initial.name)||"");
-  const [shares, setShares] = useState(initial?String(initial.shares):"");
-  const [avgCost, setAvgCost] = useState(initial?String(initial.avgCost):"");
-  const [currentPrice, setCurrentPrice] = useState(initial?String(initial.currentPrice):"");
+  const [currentPrice, setCurrentPrice] = useState(initial?String(initial.currentPrice||""):"");
   const [totalDividends, setTotalDividends] = useState(initial?String(initial.totalDividends||0):"0");
+  const [lots, setLots] = useState(()=>{
+    let base = initial ? invLots(initial).map(l=>({
+      id:l.id&&l.id!=="legacy"?l.id:newLot().id,
+      date:l.date||toDateStr(new Date()),
+      shares:String(l.shares??""), price:String(l.price??""),
+      fee:String(l.fee??DEFAULT_FEE), kind:l.kind||"spot",
+    })) : [];
+    if(!base.length || addLot) base = base.concat([newLot()]);
+    return base;
+  });
+
+  function setLot(id, patch){ setLots(ls=>ls.map(l=>l.id===id?{...l,...patch}:l)); }
+  function delLot(id){ setLots(ls=>ls.filter(l=>l.id!==id)); }
+
+  // 即時預覽
+  const preview = useMemo(()=>{
+    const clean = lots.map(l=>({shares:+l.shares||0, price:+l.price||0, fee:+l.fee||0}))
+      .filter(l=>l.shares>0);
+    const sh = clean.reduce((s,l)=>s+l.shares,0);
+    const cost = clean.reduce((s,l)=>s+l.shares*l.price+l.fee,0);
+    return { sh, cost, avg: sh>0?cost/sh:0 };
+  }, [lots]);
 
   function submit(){
     if(!symbol.trim()){ alert("請輸入股票代號"); return; }
-    const s = parseFloat(shares), c = parseFloat(avgCost), p = parseFloat(currentPrice), d = parseFloat(totalDividends);
+    const cleanLots = lots
+      .filter(l=>(+l.shares||0)>0)
+      .map(l=>({ id:l.id, date:l.date, shares:+l.shares||0, price:+l.price||0,
+        fee:+l.fee||0, kind:l.kind==="fixed"?"fixed":"spot" }));
+    if(cleanLots.length===0){ alert("至少要有一筆買進（填股數與成交價）"); return; }
+    const p = parseFloat(currentPrice), d = parseFloat(totalDividends);
     onSave({
       symbol: symbol.trim(), name: name.trim()||symbol.trim(),
-      shares: isNaN(s)?0:s, avgCost: isNaN(c)?0:c, currentPrice: isNaN(p)?0:p,
-      totalDividends: isNaN(d)?0:d,
-      updatedAt: toDateStr(new Date()),
+      currentPrice: isNaN(p)?0:p, totalDividends: isNaN(d)?0:d,
+      lots: cleanLots, updatedAt: toDateStr(new Date()),
     });
   }
 
@@ -2018,24 +2122,78 @@ function InvestmentModal({initial, onSave, onClose}){
           <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="例如：元大台灣50" />
         </div>
         <div className="field">
-          <label>總股數</label>
-          <input type="number" inputMode="decimal" value={shares} onChange={e=>setShares(e.target.value)} placeholder="0" />
+          <label>目前市價（每股 NT$，自己更新）</label>
+          <input type="number" inputMode="decimal" value={currentPrice} onChange={e=>setCurrentPrice(e.target.value)} placeholder="例如 100.15" />
         </div>
-        <div className="field">
-          <label>成交均價（每股，NT$）</label>
-          <input type="number" inputMode="decimal" value={avgCost} onChange={e=>setAvgCost(e.target.value)} placeholder="0" />
+
+        <label style={{fontSize:13,color:"var(--ink-soft)",fontWeight:600,display:"block",margin:"6px 0 6px"}}>
+          分筆買進（app 會自動幫你算均價）
+        </label>
+        <div className="lot-editor">
+          {lots.map((l,idx)=>
+            <div className="lot-edit-row" key={l.id}>
+              <div className="ler-top">
+                <span className="ler-n">第 {idx+1} 筆</span>
+                <button className="lot-del" onClick={()=>delLot(l.id)}><i className="ph ph-trash"></i></button>
+              </div>
+              <div className="ler-grid">
+                <div className="fld"><label>日期</label>
+                  <input type="date" value={l.date} onChange={e=>setLot(l.id,{date:e.target.value})} /></div>
+                <div className="fld"><label>股數</label>
+                  <input type="number" inputMode="decimal" value={l.shares} onChange={e=>setLot(l.id,{shares:e.target.value})} placeholder="0" /></div>
+                <div className="fld"><label>成交價</label>
+                  <input type="number" inputMode="decimal" value={l.price} onChange={e=>setLot(l.id,{price:e.target.value})} placeholder="0" /></div>
+                <div className="fld"><label>手續費</label>
+                  <input type="number" inputMode="decimal" value={l.fee} onChange={e=>setLot(l.id,{fee:e.target.value})} placeholder="1" /></div>
+              </div>
+              <div className="ler-kind">
+                <button className={l.kind!=="fixed"?"on":""} onClick={()=>setLot(l.id,{kind:"spot"})}>現股</button>
+                <button className={l.kind==="fixed"?"on":""} onClick={()=>setLot(l.id,{kind:"fixed"})}>定期定額</button>
+              </div>
+            </div>
+          )}
+          <button className="lot-add-btn" onClick={()=>setLots(ls=>ls.concat([newLot()]))}>
+            <i className="ph ph-plus"></i> 再加一筆買進
+          </button>
         </div>
-        <div className="field">
-          <label>市價（每股，NT$，自己更新）</label>
-          <input type="number" inputMode="decimal" value={currentPrice} onChange={e=>setCurrentPrice(e.target.value)} placeholder="0" />
-        </div>
-        <div className="field">
-          <label>總配息（累計，NT$）</label>
+
+        {preview.sh>0 &&
+          <div className="inv-summary" style={{margin:"12px 0 4px"}}>
+            <div className="row"><span className="lbl">總股數</span><span className="val">{preview.sh}</span></div>
+            <div className="row"><span className="lbl">成交均價</span><span className="val">{preview.avg.toFixed(2)}</span></div>
+            <div className="row"><span className="lbl">總成本（含手續費）</span><span className="val">{fmtMoney(preview.cost)}</span></div>
+          </div>
+        }
+
+        <div className="field" style={{marginTop:8}}>
+          <label>累計配息（NT$，選填）</label>
           <input type="number" inputMode="decimal" value={totalDividends} onChange={e=>setTotalDividends(e.target.value)} placeholder="0" />
         </div>
         <div className="btn-row">
           <button className="btn ghost" onClick={onClose}>取消</button>
           <button className="btn primary" onClick={submit}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* 只更新市價的極簡 sheet（最高頻動作） */
+function PriceModal({inv, onSave, onClose}){
+  const [price, setPrice] = useState(String(inv.currentPrice||""));
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()} style={{maxWidth:340}}>
+        <div className="sheet-handle"></div>
+        <h2>更新市價</h2>
+        <div style={{fontSize:14,color:"var(--ink-soft)",marginBottom:10}}>{inv.name} <span style={{opacity:.7}}>{inv.symbol}</span></div>
+        <div className="field">
+          <label>目前市價（每股 NT$）</label>
+          <input type="number" inputMode="decimal" autoFocus value={price} onChange={e=>setPrice(e.target.value)} placeholder="例如 100.15" />
+        </div>
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={()=>{ const p=parseFloat(price); onSave({currentPrice:isNaN(p)?0:p, updatedAt:toDateStr(new Date())}); }}>儲存</button>
         </div>
       </div>
     </div>
@@ -3146,30 +3304,70 @@ function AccountsSection({accounts, transactions, categories, onViewTx, onAddAcc
   );
 }
 
-function InvestmentRow({inv, onEdit, onDelete}){
+function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice}){
+  const [open, setOpen] = useState(false);
   const value = invMarketValue(inv);
   const cost = invCostBasis(inv);
   const gain = invGain(inv);
   const pct = invReturnPct(inv);
-  const pos = gain>=0;
+  const shares = invTotalShares(inv);
+  const avg = invAvgCost(inv);
+  const gCls = gain>=0 ? "tw-up" : "tw-down";
+  const sign = gain>=0 ? "+" : "";
+  const price = +inv.currentPrice||0;
+  const lots = invLots(inv).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const div = +inv.totalDividends||0;
+
   return (
-    <div className="inv-row">
-      <div className="inv-top">
-        <div>
-          <span className="inv-name">{inv.name}</span><span className="inv-code">{inv.symbol}</span>
-          <div className="inv-shares">總股數 {inv.shares}</div>
+    <div className={"inv-card"+(open?" open":"")}>
+      <div className="ic-head" onClick={()=>setOpen(o=>!o)}>
+        <div className="ic-title">
+          <div><span className="ic-name">{inv.name}</span><span className="ic-code">{inv.symbol}</span></div>
+          <div className="ic-shares">總股數 {shares}　·　{lots.length} 筆買進</div>
         </div>
-        <span className={"inv-pct "+(pos?"pos":"neg")}>{pos?"+":""}{fmtMoney(gain)}（{pos?"+":""}{pct.toFixed(2)}%）</span>
+        <div className="ic-gain">
+          <div className={"g-amt "+gCls}>{sign}{fmtMoney(gain)}</div>
+          <div className={"g-pct "+gCls}>{sign}{pct.toFixed(2)}%　<i className={"ph ph-caret-down ic-chev"}></i></div>
+        </div>
       </div>
-      <div className="inv-detail">
-        <div className="inv-detail-row"><span className="lbl">成交均價</span><span className="val">{inv.avgCost}</span></div>
-        <div className="inv-detail-row"><span className="lbl">現值</span><span className="val">{fmtMoney(value)}</span></div>
-        <div className="inv-detail-row"><span className="lbl">成本</span><span className="val">{fmtMoney(cost)}</span></div>
-        <div className="inv-detail-row"><span className="lbl">市價</span><span className="val">{inv.currentPrice}</span></div>
-        <div className="inv-detail-row"><span className="lbl">總配息</span><span className="val">{fmtMoney(inv.totalDividends||0)}</span></div>
+
+      <div className="ic-metrics">
+        <div className="ic-metric"><div className="m-lbl">現值</div><div className="m-val">{fmtMoney(value)}</div></div>
+        <div className="ic-metric"><div className="m-lbl">成本（含手續費）</div><div className="m-val">{fmtMoney(cost)}</div></div>
+        <div className="ic-metric"><div className="m-lbl">成交均價</div><div className="m-val">{avg.toFixed(2)}</div></div>
+        <div className="ic-metric"><div className="m-lbl">配息</div><div className="m-val">{fmtMoney(div)}</div></div>
+        <div className="ic-price" onClick={()=>onUpdatePrice(inv)}>
+          <span className="p-lbl"><i className="ph ph-arrows-clockwise"></i>市價（點我更新）</span>
+          <span className="p-val">{price?price:"—"} <i className="ph ph-pencil-simple"></i></span>
+        </div>
       </div>
-      <div className="inv-actions">
-        <button onClick={()=>onEdit(inv)}><i className="ph ph-pencil-line"></i></button>
+
+      {open &&
+        <div className="lot-list">
+          <div className="lot-hd"><span>每筆買進</span><span>單筆損益（以現價估）</span></div>
+          {lots.map(l=>{
+            const lg = lotGain(l, price), lp = lotPct(l, price);
+            const lcls = lg>=0?"tw-up":"tw-down", ls = lg>=0?"+":"";
+            return (
+              <div className="lot-item" key={l.id}>
+                <div className="lot-date">{(l.date||"").slice(5)}</div>
+                <div className="lot-mid">
+                  <div className="lot-line1">
+                    <span className={"lot-badge "+(l.kind==="fixed"?"fixed":"spot")}>{l.kind==="fixed"?"定額":"現股"}</span>
+                    <b>{l.shares}</b> 股 @ {l.price}
+                  </div>
+                  <div className="lot-line2">成本 {fmtMoney(lotCost(l))}（含費 {l.fee||0}）</div>
+                </div>
+                <div className={"lot-gain "+lcls}>{ls}{fmtMoney(lg)}<div className="lg-pct">{ls}{lp.toFixed(2)}%</div></div>
+              </div>
+            );
+          })}
+        </div>
+      }
+
+      <div className="ic-foot">
+        <button className="addlot" onClick={()=>onAddLot(inv)}><i className="ph ph-plus"></i>加一筆買進</button>
+        <button onClick={()=>onEdit(inv)}><i className="ph ph-pencil-line"></i>編輯</button>
         <button onClick={()=>onDelete(inv)}><i className="ph ph-trash"></i></button>
       </div>
     </div>
@@ -3178,46 +3376,60 @@ function InvestmentRow({inv, onEdit, onDelete}){
 
 function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onDeleteInvestment}){
   const [modal, setModal] = useState(null);
+  const [priceModal, setPriceModal] = useState(null);
   function handleDelete(inv){
-    if(!confirm("確定刪除「"+inv.name+"」這筆持股紀錄？")) return;
+    if(!confirm("確定刪除「"+inv.name+"」整檔持股（含所有買進紀錄）？")) return;
     onDeleteInvestment(inv.id);
   }
   const totalValue = investments.reduce((s,i)=>s+invMarketValue(i),0);
   const totalCost = investments.reduce((s,i)=>s+invCostBasis(i),0);
-  const totalGain = totalValue - totalCost;
+  const totalDiv = investments.reduce((s,i)=>s+(+i.totalDividends||0),0);
+  const totalGain = totalValue - totalCost + totalDiv;
   const totalPct = totalCost>0 ? (totalGain/totalCost*100) : 0;
-  const totalDiv = investments.reduce((s,i)=>s+(i.totalDividends||0),0);
-  const posTotal = totalGain>=0;
+  const gCls = totalGain>=0 ? "tw-up" : "tw-down";
+  const sign = totalGain>=0 ? "+" : "";
 
   return (
     <div>
       {investments.length>0 &&
         <div className="inv-summary">
+          <div className="is-hero">
+            <div className="h-lbl">總損益（含息）</div>
+            <div className={"h-amt "+gCls}>{sign}{fmtMoney(totalGain)}</div>
+            <div className={"h-pct "+gCls}>{sign}{totalPct.toFixed(2)}%</div>
+          </div>
           <div className="row"><span className="lbl">總現值</span><span className="val">{fmtMoney(totalValue)}</span></div>
           <div className="row"><span className="lbl">總成本</span><span className="val">{fmtMoney(totalCost)}</span></div>
-          <div className="row"><span className="lbl">總損益（不含息）</span>
-            <span className={"val "+(posTotal?"pos":"neg")}>{posTotal?"+":""}{fmtMoney(totalGain)}（{posTotal?"+":""}{totalPct.toFixed(2)}%）</span></div>
           <div className="row"><span className="lbl">總配息</span><span className="val">{fmtMoney(totalDiv)}</span></div>
         </div>
       }
       <div className="acc-section">
         <div className="acc-section-title">
           <h3>📈 持股</h3>
-          <button onClick={()=>setModal({})}>＋ 新增持股</button>
+          <button onClick={()=>setModal({type:"add"})}>＋ 新增持股</button>
         </div>
-        {investments.length===0 && <div className="empty-hint">還沒有任何持股，先加一筆 0050 或 2330 試試</div>}
-        {investments.slice().sort((a,b)=>a.symbol.localeCompare(b.symbol)).map(inv=>
-          <InvestmentRow key={inv.id} inv={inv} onEdit={(i)=>setModal({initial:i})} onDelete={handleDelete} />
+        {investments.length===0 && <div className="empty-hint">還沒有任何持股，先加一檔 0050 或 2330 試試</div>}
+        {investments.slice().sort((a,b)=>String(a.symbol).localeCompare(String(b.symbol))).map(inv=>
+          <InvestmentRow key={inv.id} inv={inv}
+            onEdit={(i)=>setModal({type:"edit", initial:i})}
+            onAddLot={(i)=>setModal({type:"edit", initial:i, addLot:true})}
+            onUpdatePrice={(i)=>setPriceModal(i)}
+            onDelete={handleDelete} />
         )}
       </div>
       {modal &&
-        <InvestmentModal initial={modal.initial}
+        <InvestmentModal initial={modal.initial} addLot={modal.addLot}
           onClose={()=>setModal(null)}
           onSave={(data)=>{
             if(modal.initial) onEditInvestment(modal.initial.id, data);
             else onAddInvestment(data);
             setModal(null);
           }} />
+      }
+      {priceModal &&
+        <PriceModal inv={priceModal}
+          onClose={()=>setPriceModal(null)}
+          onSave={(data)=>{ onEditInvestment(priceModal.id, data); setPriceModal(null); }} />
       }
     </div>
   );
