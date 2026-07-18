@@ -893,17 +893,34 @@ function invLots(inv){
   }
   return [];
 }
-function lotCost(l){ return (+l.shares||0)*(+l.price||0) + (+l.fee||0); }
+/* 價金：券商是先把「股數×成交價」無條件捨去到整數，再加手續費 */
+function lotAmount(l){ return Math.floor((+l.shares||0)*(+l.price||0)); }
+function lotCost(l){ return lotAmount(l) + (+l.fee||0); }
 function lotValue(l, price){ return (+l.shares||0)*(+price||0); }
 function lotGain(l, price){ return lotValue(l, price) - lotCost(l); }
 function lotPct(l, price){ const c=lotCost(l); return c>0 ? lotGain(l,price)/c*100 : 0; }
 
+/* 配息紀錄：實拿 = 配息金額 − 匯費／手續費 */
+function invDivs(inv){
+  if(Array.isArray(inv.divs)) return inv.divs;
+  const legacy = +inv.totalDividends||0;
+  return legacy ? [{id:"legacy", date:inv.updatedAt||"", amount:legacy, fee:0}] : [];
+}
+function divNet(d){ return (+d.amount||0) - (+d.fee||0); }
+function invTotalDividends(inv){ return invDivs(inv).reduce((s,d)=>s+divNet(d),0); }
+
 function invTotalShares(inv){ return invLots(inv).reduce((s,l)=>s+(+l.shares||0),0); }
 function invCostBasis(inv){ return invLots(inv).reduce((s,l)=>s+lotCost(l),0); }
-function invAvgCost(inv){ const sh=invTotalShares(inv); return sh>0 ? invCostBasis(inv)/sh : 0; }
+/* 成交均價：券商慣例是純價金÷股數，不含手續費 */
+function invAvgCost(inv){
+  const sh = invTotalShares(inv);
+  if(sh<=0) return 0;
+  const amt = invLots(inv).reduce((s,l)=>s+(+l.shares||0)*(+l.price||0), 0);
+  return amt/sh;
+}
 function invMarketValue(inv){ return invTotalShares(inv) * (+inv.currentPrice||0); }
 /* 損益含息，與券商一致 */
-function invGain(inv){ return invMarketValue(inv) - invCostBasis(inv) + (+inv.totalDividends||0); }
+function invGain(inv){ return invMarketValue(inv) - invCostBasis(inv) + invTotalDividends(inv); }
 function invReturnPct(inv){
   const cost = invCostBasis(inv);
   return cost>0 ? (invGain(inv)/cost*100) : 0;
@@ -2065,11 +2082,14 @@ function newLot(){
   return { id:"L"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
     date:toDateStr(new Date()), shares:"", price:"", fee:String(DEFAULT_FEE), kind:"spot" };
 }
+function newDiv(){
+  return { id:"D"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    date:toDateStr(new Date()), amount:"", fee:"" };
+}
 function InvestmentModal({initial, addLot, onSave, onClose}){
   const [symbol, setSymbol] = useState((initial&&initial.symbol)||"");
   const [name, setName] = useState((initial&&initial.name)||"");
   const [currentPrice, setCurrentPrice] = useState(initial?String(initial.currentPrice||""):"");
-  const [totalDividends, setTotalDividends] = useState(initial?String(initial.totalDividends||0):"0");
   const [lots, setLots] = useState(()=>{
     let base = initial ? invLots(initial).map(l=>({
       id:l.id&&l.id!=="legacy"?l.id:newLot().id,
@@ -2080,18 +2100,29 @@ function InvestmentModal({initial, addLot, onSave, onClose}){
     if(!base.length || addLot) base = base.concat([newLot()]);
     return base;
   });
+  const [divs, setDivs] = useState(()=>
+    initial ? invDivs(initial).map(d=>({
+      id:d.id&&d.id!=="legacy"?d.id:newDiv().id,
+      date:d.date||toDateStr(new Date()),
+      amount:String(d.amount??""), fee:String(d.fee??0),
+    })) : []
+  );
 
   function setLot(id, patch){ setLots(ls=>ls.map(l=>l.id===id?{...l,...patch}:l)); }
   function delLot(id){ setLots(ls=>ls.filter(l=>l.id!==id)); }
+  function setDiv(id, patch){ setDivs(ds=>ds.map(d=>d.id===id?{...d,...patch}:d)); }
+  function delDiv(id){ setDivs(ds=>ds.filter(d=>d.id!==id)); }
 
-  // 即時預覽
+  // 即時預覽（跟券商同一套算法）
   const preview = useMemo(()=>{
     const clean = lots.map(l=>({shares:+l.shares||0, price:+l.price||0, fee:+l.fee||0}))
       .filter(l=>l.shares>0);
     const sh = clean.reduce((s,l)=>s+l.shares,0);
-    const cost = clean.reduce((s,l)=>s+l.shares*l.price+l.fee,0);
-    return { sh, cost, avg: sh>0?cost/sh:0 };
-  }, [lots]);
+    const cost = clean.reduce((s,l)=>s+Math.floor(l.shares*l.price)+l.fee, 0);
+    const amt = clean.reduce((s,l)=>s+l.shares*l.price, 0);
+    const netDiv = divs.reduce((s,d)=>s+((+d.amount||0)-(+d.fee||0)), 0);
+    return { sh, cost, avg: sh>0?amt/sh:0, netDiv };
+  }, [lots, divs]);
 
   function submit(){
     if(!symbol.trim()){ alert("請輸入股票代號"); return; }
@@ -2100,11 +2131,16 @@ function InvestmentModal({initial, addLot, onSave, onClose}){
       .map(l=>({ id:l.id, date:l.date, shares:+l.shares||0, price:+l.price||0,
         fee:+l.fee||0, kind:l.kind==="fixed"?"fixed":"spot" }));
     if(cleanLots.length===0){ alert("至少要有一筆買進（填股數與成交價）"); return; }
-    const p = parseFloat(currentPrice), d = parseFloat(totalDividends);
+    const cleanDivs = divs
+      .filter(d=>(+d.amount||0)!==0 || (+d.fee||0)!==0)
+      .map(d=>({ id:d.id, date:d.date, amount:+d.amount||0, fee:+d.fee||0 }));
+    const p = parseFloat(currentPrice);
     onSave({
       symbol: symbol.trim(), name: name.trim()||symbol.trim(),
-      currentPrice: isNaN(p)?0:p, totalDividends: isNaN(d)?0:d,
-      lots: cleanLots, updatedAt: toDateStr(new Date()),
+      currentPrice: isNaN(p)?0:p,
+      lots: cleanLots, divs: cleanDivs,
+      totalDividends: cleanDivs.reduce((s,d)=>s+d.amount-d.fee,0),
+      updatedAt: toDateStr(new Date()),
     });
   }
 
@@ -2157,18 +2193,41 @@ function InvestmentModal({initial, addLot, onSave, onClose}){
           </button>
         </div>
 
+        <label style={{fontSize:13,color:"var(--ink-soft)",fontWeight:600,display:"block",margin:"14px 0 6px"}}>
+          配息紀錄（選填，可扣匯費）
+        </label>
+        <div className="lot-editor">
+          {divs.map((d,idx)=>
+            <div className="lot-edit-row" key={d.id}>
+              <div className="ler-top">
+                <span className="ler-n">第 {idx+1} 次配息　實拿 {fmtMoney((+d.amount||0)-(+d.fee||0))}</span>
+                <button className="lot-del" onClick={()=>delDiv(d.id)}><i className="ph ph-trash"></i></button>
+              </div>
+              <div className="ler-grid">
+                <div className="fld"><label>入帳日</label>
+                  <input type="date" value={d.date} onChange={e=>setDiv(d.id,{date:e.target.value})} /></div>
+                <div className="fld"><label>配息金額</label>
+                  <input type="number" inputMode="decimal" value={d.amount} onChange={e=>setDiv(d.id,{amount:e.target.value})} placeholder="0" /></div>
+                <div className="fld" style={{gridColumn:"1 / -1"}}><label>匯費／手續費</label>
+                  <input type="number" inputMode="decimal" value={d.fee} onChange={e=>setDiv(d.id,{fee:e.target.value})} placeholder="0" /></div>
+              </div>
+            </div>
+          )}
+          <button className="lot-add-btn" onClick={()=>setDivs(ds=>ds.concat([newDiv()]))}>
+            <i className="ph ph-plus"></i> {divs.length?"再加一次配息":"加一次配息"}
+          </button>
+        </div>
+
         {preview.sh>0 &&
           <div className="inv-summary" style={{margin:"12px 0 4px"}}>
             <div className="row"><span className="lbl">總股數</span><span className="val">{preview.sh}</span></div>
             <div className="row"><span className="lbl">成交均價</span><span className="val">{preview.avg.toFixed(2)}</span></div>
             <div className="row"><span className="lbl">總成本（含手續費）</span><span className="val">{fmtMoney(preview.cost)}</span></div>
+            {preview.netDiv!==0 &&
+              <div className="row"><span className="lbl">配息實拿</span><span className="val">{fmtMoney(preview.netDiv)}</span></div>}
           </div>
         }
 
-        <div className="field" style={{marginTop:8}}>
-          <label>累計配息（NT$，選填）</label>
-          <input type="number" inputMode="decimal" value={totalDividends} onChange={e=>setTotalDividends(e.target.value)} placeholder="0" />
-        </div>
         <div className="btn-row">
           <button className="btn ghost" onClick={onClose}>取消</button>
           <button className="btn primary" onClick={submit}>儲存</button>
@@ -2823,7 +2882,7 @@ function LineChart({series}){
   );
 }
 
-function AnalysisTab({categories, transactions, accounts}){
+function AnalysisTab({categories, transactions, accounts, investments}){
   const [nwMode, setNwMode] = useState("month");
   const [view, setView] = useState("networth");
   const [periodStart, setPeriodStart] = useState(()=>{
@@ -2832,14 +2891,31 @@ function AnalysisTab({categories, transactions, accounts}){
   const [periodEnd, setPeriodEnd] = useState(()=>toDateStr(new Date()));
   const [showPeriodSheet, setShowPeriodSheet] = useState(false);
 
-  function calcNetWorth(txUpTo){
+  const todayStr = toDateStr(new Date());
+  /* 截至某日的持股價值：
+     過去月份沒有當時的歷史股價，用「買進成本」計價；
+     已到今天的時間點才用目前市價，差額就是未實現損益。 */
+  function investValueAt(upTo){
+    const useMarket = upTo >= todayStr;
+    return (investments||[]).reduce((sum, inv)=>{
+      const lots = invLots(inv).filter(l=>(l.date||"") <= upTo);
+      if(!lots.length) return sum;
+      if(useMarket){
+        const sh = lots.reduce((s,l)=>s+(+l.shares||0),0);
+        return sum + sh*(+inv.currentPrice||0);
+      }
+      return sum + lots.reduce((s,l)=>s+lotCost(l),0);
+    }, 0);
+  }
+
+  function calcNetWorth(txUpTo, upToDate){
     let assets=0, liabilities=0;
     accounts.filter(a=>!isExcluded(a)).forEach(acc=>{
       const bal = accountBalance(acc, txUpTo);
       if(isLiability(acc.type)) liabilities += Math.max(0,bal);
       else assets += bal;
     });
-    return assets - liabilities;
+    return assets + investValueAt(upToDate) - liabilities;
   }
 
   const networthSeries = useMemo(()=>{
@@ -2850,7 +2926,7 @@ function AnalysisTab({categories, transactions, accounts}){
         const d=new Date(today.getFullYear(),today.getMonth()-i,1);
         const key=d.getFullYear()+"-"+pad(d.getMonth()+1);
         labels.push((d.getFullYear()%100)+"年"+(d.getMonth()+1)+"月");
-        values.push(calcNetWorth(transactions.filter(t=>t.date<=key+"-31")));
+        values.push(calcNetWorth(transactions.filter(t=>t.date<=key+"-31"), key+"-31"));
       }
     } else if(nwMode==="year"){
       const allYears=[...new Set(transactions.map(t=>t.date.slice(0,4)))].sort();
@@ -2859,7 +2935,7 @@ function AnalysisTab({categories, transactions, accounts}){
       allYears.forEach(y=>{
         const endDate = y===thisYear ? toDateStr(new Date()) : y+"-12-31";
         labels.push(y+"年");
-        values.push(calcNetWorth(transactions.filter(t=>t.date<=endDate)));
+        values.push(calcNetWorth(transactions.filter(t=>t.date<=endDate), endDate));
       });
     } else {
       const startD = fromDateStr(periodStart);
@@ -2869,13 +2945,13 @@ function AnalysisTab({categories, transactions, accounts}){
         while(cur<=endD){
           const key=cur.getFullYear()+"-"+pad(cur.getMonth()+1);
           labels.push((cur.getFullYear()%100)+"年"+(cur.getMonth()+1)+"月");
-          values.push(calcNetWorth(transactions.filter(t=>t.date<=key+"-31")));
+          values.push(calcNetWorth(transactions.filter(t=>t.date<=key+"-31"), key+"-31"));
           cur=new Date(cur.getFullYear(), cur.getMonth()+1, 1);
         }
       }
     }
     return [{label:"淨資產", color:"var(--income)", values, labels}];
-  }, [nwMode, transactions, accounts, periodStart, periodEnd]);
+  }, [nwMode, transactions, accounts, investments, periodStart, periodEnd]);
 
   const cashflowSeries = useMemo(()=>{
     const today=new Date();
@@ -3316,7 +3392,8 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice}){
   const sign = gain>=0 ? "+" : "";
   const price = +inv.currentPrice||0;
   const lots = invLots(inv).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
-  const div = +inv.totalDividends||0;
+  const divs = invDivs(inv).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const div = invTotalDividends(inv);
 
   return (
     <div className={"inv-card"+(open?" open":"")}>
@@ -3335,7 +3412,7 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice}){
         <div className="ic-metric"><div className="m-lbl">現值</div><div className="m-val">{fmtMoney(value)}</div></div>
         <div className="ic-metric"><div className="m-lbl">成本（含手續費）</div><div className="m-val">{fmtMoney(cost)}</div></div>
         <div className="ic-metric"><div className="m-lbl">成交均價</div><div className="m-val">{avg.toFixed(2)}</div></div>
-        <div className="ic-metric"><div className="m-lbl">配息</div><div className="m-val">{fmtMoney(div)}</div></div>
+        <div className="ic-metric"><div className="m-lbl">配息（實拿）</div><div className="m-val">{fmtMoney(div)}</div></div>
         <div className="ic-price" onClick={()=>onUpdatePrice(inv)}>
           <span className="p-lbl"><i className="ph ph-arrows-clockwise"></i>市價（點我更新）</span>
           <span className="p-val">{price?price:"—"} <i className="ph ph-pencil-simple"></i></span>
@@ -3362,6 +3439,23 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice}){
               </div>
             );
           })}
+          {divs.length>0 &&
+            <div style={{marginTop:6}}>
+              <div className="lot-hd" style={{borderTop:"1px solid var(--line)",paddingTop:10}}>
+                <span>配息紀錄</span><span>實拿</span>
+              </div>
+              {divs.map(d=>
+                <div className="lot-item" key={d.id}>
+                  <div className="lot-date">{(d.date||"").slice(5)||"—"}</div>
+                  <div className="lot-mid">
+                    <div className="lot-line1">配息 <b>{fmtMoney(+d.amount||0)}</b></div>
+                    {(+d.fee||0)>0 && <div className="lot-line2">匯費 {fmtMoney(+d.fee||0)}</div>}
+                  </div>
+                  <div className="lot-gain tw-up">{fmtMoney(divNet(d))}</div>
+                </div>
+              )}
+            </div>
+          }
         </div>
       }
 
@@ -3383,7 +3477,7 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
   }
   const totalValue = investments.reduce((s,i)=>s+invMarketValue(i),0);
   const totalCost = investments.reduce((s,i)=>s+invCostBasis(i),0);
-  const totalDiv = investments.reduce((s,i)=>s+(+i.totalDividends||0),0);
+  const totalDiv = investments.reduce((s,i)=>s+invTotalDividends(i),0);
   const totalGain = totalValue - totalCost + totalDiv;
   const totalPct = totalCost>0 ? (totalGain/totalCost*100) : 0;
   const gCls = totalGain>=0 ? "tw-up" : "tw-down";
@@ -3400,7 +3494,7 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
           </div>
           <div className="row"><span className="lbl">總現值</span><span className="val">{fmtMoney(totalValue)}</span></div>
           <div className="row"><span className="lbl">總成本</span><span className="val">{fmtMoney(totalCost)}</span></div>
-          <div className="row"><span className="lbl">總配息</span><span className="val">{fmtMoney(totalDiv)}</span></div>
+          <div className="row"><span className="lbl">總配息（實拿）</span><span className="val">{fmtMoney(totalDiv)}</span></div>
         </div>
       }
       <div className="acc-section">
@@ -4486,7 +4580,7 @@ function App(){
           </React.Fragment>
         }
         {tab==="analysis" &&
-          <AnalysisTab categories={categories} transactions={transactions} accounts={accounts} />
+          <AnalysisTab categories={categories} transactions={transactions} accounts={accounts} investments={investments} />
         }
         {tab==="settings" &&
           <SettingsTab categories={categories} accounts={accounts} transactions={transactions} investments={investments} subscriptions={subscriptions} onViewTx={openViewTx} onRecolorAll={recolorAll}
