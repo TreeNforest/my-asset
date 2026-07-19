@@ -1,0 +1,58 @@
+name: 更新台股報價
+
+on:
+  schedule:
+    # 台灣時間週一～週五 14:10（收盤後），cron 用 UTC 所以是 06:10
+    - cron: '10 6 * * 1-5'
+  workflow_dispatch:        # 也可以在 Actions 頁面手動按一下執行
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 抓取收盤價並寫入 prices.json
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request, datetime
+
+          # ⬇️ 想追蹤的股票代號都寫在這裡
+          CODES = ["0050", "2330"]
+
+          url = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
+          req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+          rows = json.load(urllib.request.urlopen(req, timeout=30))
+
+          prices = {}
+          for r in rows:
+              code = str(r.get("Code", "")).strip()
+              if code not in CODES:
+                  continue
+              raw = str(r.get("ClosingPrice", "")).replace(",", "").strip()
+              try:
+                  p = float(raw)
+              except ValueError:
+                  continue
+              if p > 0:
+                  prices[code] = p
+
+          out = {
+              "updatedAt": datetime.datetime.utcnow().isoformat() + "Z",
+              "prices": prices,
+          }
+          with open("prices.json", "w", encoding="utf-8") as f:
+              json.dump(out, f, ensure_ascii=False, indent=2)
+          print(out)
+          PY
+
+      - name: Commit
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add prices.json
+          git diff --staged --quiet || git commit -m "chore: 更新股價 $(date -u +%Y-%m-%d)"
+          git push
