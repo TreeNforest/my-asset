@@ -896,39 +896,118 @@ function accountBalance(acc, transactions){
   return bal;
 }
 
-/* ── 台股收盤價自動更新（證交所 OpenAPI，上市股票）──
-   一次回傳全市場最近交易日收盤價，所以多檔持股共用同一次請求。*/
+/* ── 台股報價自動更新 ──
+   瀏覽器直連證交所會被 CORS 擋掉，所以依序嘗試多個來源，哪個通就用哪個：
+   1. ./prices.json      同網域快取（可用 GitHub Actions 每天產生，最快最穩）
+   2. 證交所即時報價      經 CORS 代理，資料小、上市上櫃都支援
+   3. 證交所收盤行情      經 CORS 代理，官方收盤價（僅上市）
+*/
+const MIS_BASE = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=";
 const TWSE_ENDPOINT = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL";
-let _twseCache = { map:null, ts:0 };
-async function fetchTwseCloses(force){
-  const FRESH = 10*60*1000; // 10 分鐘內不重抓
-  if(!force && _twseCache.map && (Date.now()-_twseCache.ts) < FRESH) return _twseCache.map;
-  let rows;
+const CORS_PROXIES = [
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  u => "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(u),
+  u => "https://cors.x2u.in/" + u,
+];
+
+async function getJSON(url, ms){
+  const ctl = new AbortController();
+  const t = setTimeout(()=>ctl.abort(), ms||9000);
   try{
-    const res = await fetch(TWSE_ENDPOINT, {cache:"no-store"});
+    const res = await fetch(url, {signal:ctl.signal, cache:"no-store"});
     if(!res.ok) throw new Error("HTTP "+res.status);
-    rows = await res.json();
-  }catch(err){
-    const e = new Error("連線失敗，請確認網路後再試");
-    e.kind = "network";
-    throw e;
+    return await res.json();
+  } finally { clearTimeout(t); }
+}
+/* 先直連，不行再逐一試代理 */
+async function getJSONAnyway(url){
+  let lastErr;
+  const attempts = [url].concat(CORS_PROXIES.map(f=>f(url)));
+  for(const u of attempts){
+    try{ return await getJSON(u); }
+    catch(e){ lastErr = e; }
   }
-  if(!Array.isArray(rows) || !rows.length){
-    const e = new Error("證交所暫時沒有回傳資料"); e.kind="empty"; throw e;
+  throw lastErr || new Error("全部來源都失敗");
+}
+
+/* 來源 1：同網域 prices.json（可選，設定了才有） */
+async function srcLocal(symbols){
+  const data = await getJSON("./prices.json?t="+Date.now(), 4000);
+  const map = {};
+  Object.keys(data.prices||data||{}).forEach(k=>{
+    const p = parseFloat(String((data.prices||data)[k]).replace(/,/g,""));
+    if(!isNaN(p) && p>0) map[k] = p;
+  });
+  return map;
+}
+/* 來源 2：證交所即時報價（上市 tse_ / 上櫃 otc_） */
+async function misQuery(symbols, prefix){
+  if(!symbols.length) return {};
+  const ex = symbols.map(s=>prefix+"_"+s+".tw").join("|");
+  const data = await getJSONAnyway(MIS_BASE + encodeURIComponent(ex));
+  const map = {};
+  (data.msgArray||[]).forEach(m=>{
+    // z=成交價，收盤後或無成交時退回 y=昨收
+    const cand = [m.z, m.y, m.o].map(v=>parseFloat(String(v||"").replace(/,/g,"")));
+    const p = cand.find(v=>!isNaN(v) && v>0);
+    if(m.c && p!=null) map[String(m.c).trim()] = p;
+  });
+  return map;
+}
+async function srcMis(symbols){
+  const got = await misQuery(symbols, "tse");          // 先試上市
+  const rest = symbols.filter(s=>got[s]==null);
+  if(rest.length){
+    try{ Object.assign(got, await misQuery(rest, "otc")); }catch(e){}  // 再試上櫃
   }
+  return got;
+}
+/* 來源 3：證交所每日收盤行情（僅上市，資料較大） */
+async function srcOpenApi(symbols){
+  const rows = await getJSONAnyway(TWSE_ENDPOINT);
+  if(!Array.isArray(rows) || !rows.length) throw new Error("無資料");
+  const want = new Set(symbols);
   const map = {};
   rows.forEach(r=>{
     const code = String(r.Code||"").trim();
-    const raw = String(r.ClosingPrice||"").replace(/,/g,"").trim();
-    const p = parseFloat(raw);
-    if(code && !isNaN(p) && p>0) map[code] = p;
+    if(!want.has(code)) return;
+    const p = parseFloat(String(r.ClosingPrice||"").replace(/,/g,"").trim());
+    if(!isNaN(p) && p>0) map[code] = p;
   });
-  _twseCache = { map, ts: Date.now() };
   return map;
 }
-/* 回傳 {updated:[...], missing:[...]}，missing 代表查無代號（多半是上櫃或代號打錯） */
+
+let _priceCache = { map:null, ts:0, src:"" };
+/* 依序嘗試所有來源，回傳 {map, src} */
+async function fetchPrices(symbols, force){
+  const FRESH = 5*60*1000;
+  if(!force && _priceCache.map && (Date.now()-_priceCache.ts) < FRESH){
+    return { map:_priceCache.map, src:_priceCache.src };
+  }
+  const sources = [
+    ["本機快取", srcLocal],
+    ["證交所報價", srcMis],
+    ["證交所收盤", srcOpenApi],
+  ];
+  let lastErr;
+  for(const [label, fn] of sources){
+    try{
+      const map = await fn(symbols);
+      if(map && Object.keys(map).length){
+        _priceCache = { map, ts:Date.now(), src:label };
+        return { map, src:label };
+      }
+    }catch(e){ lastErr = e; }
+  }
+  const e = new Error("所有報價來源都連不上，可能是網路或服務暫時異常");
+  e.cause = lastErr;
+  throw e;
+}
+
+/* 回傳 {updated, missing, src} */
 async function autoUpdatePrices(invs, applyPatch, force){
-  const map = await fetchTwseCloses(force);
+  const symbols = invs.map(i=>String(i.symbol||"").trim()).filter(Boolean);
+  const { map, src } = await fetchPrices(symbols, force);
   const updated = [], missing = [];
   invs.forEach(inv=>{
     const code = String(inv.symbol||"").trim();
@@ -937,7 +1016,7 @@ async function autoUpdatePrices(invs, applyPatch, force){
     applyPatch(inv.id, { currentPrice:p, priceUpdatedAt: new Date().toISOString() });
     updated.push(code);
   });
-  return { updated, missing };
+  return { updated, missing, src };
 }
 /* 取得正規化的分筆買進清單；相容舊資料（把整包 shares/avgCost 當成一筆） */
 function invLots(inv){
@@ -2300,9 +2379,10 @@ function PriceModal({inv, onSave, onClose}){
   async function grab(){
     setBusy(true); setErr("");
     try{
-      const map = await fetchTwseCloses(true);
-      const p = map[String(inv.symbol||"").trim()];
-      if(p==null) setErr("查無此代號（可能是上櫃股），請手動輸入");
+      const code = String(inv.symbol||"").trim();
+      const { map } = await fetchPrices([code], true);
+      const p = map[code];
+      if(p==null) setErr("查無此代號的報價，請確認代號或手動輸入");
       else setPrice(String(p));
     }catch(e){ setErr("抓取失敗："+e.message); }
     finally{ setBusy(false); }
@@ -3574,7 +3654,9 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
     try{
       const r = await autoUpdatePrices([inv], onEditInvestment, false);
       if(r.missing.length){
-        setSyncMsg({text:"查無代號 "+r.missing.join("、")+"，可能是上櫃股或代號有誤，請手動輸入", err:true});
+        setSyncMsg({text:"查無代號 "+r.missing.join("、")+"，請確認代號或手動輸入", err:true});
+      }else{
+        setSyncMsg({text:"已更新（來源："+r.src+"）", err:false});
       }
     }catch(err){
       setSyncMsg({text:"更新失敗："+err.message+"（可手動輸入市價）", err:true});
@@ -3586,7 +3668,7 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
     setSyncAll(true); setSyncMsg(null);
     try{
       const r = await autoUpdatePrices(investments, onEditInvestment, true);
-      let t = "已更新 "+r.updated.length+" 檔收盤價";
+      let t = "已更新 "+r.updated.length+" 檔（來源："+r.src+"）";
       if(r.missing.length) t += "；查無 "+r.missing.join("、")+"（請手動輸入）";
       setSyncMsg({text:t, err:r.missing.length>0});
     }catch(err){
@@ -3620,7 +3702,7 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
         <div className="price-sync-bar">
           <button disabled={syncAll} onClick={syncEverything}>
             <i className={"ph ph-arrows-clockwise"+(syncAll?" spin":"")}></i>
-            {syncAll?"更新中…":"更新收盤價"}
+            {syncAll?"更新中…":"更新股價"}
           </button>
           {syncMsg && <span className={"sync-msg"+(syncMsg.err?" err":"")}>{syncMsg.text}</span>}
         </div>
