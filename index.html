@@ -564,6 +564,20 @@
   .inv-card .ic-price .p-lbl{font-size:12px;color:var(--ink-soft);display:flex;align-items:center;gap:5px;}
   .inv-card .ic-price .p-val{font-size:16px;font-weight:700;display:flex;align-items:center;gap:6px;}
   .inv-card .ic-price .p-val .ph{font-size:14px;color:var(--accent);}
+  .ic-price .p-sync{background:none;border:none;padding:4px 6px;margin:-4px -6px -4px 0;
+    color:var(--accent);font-size:17px;display:flex;align-items:center;font-family:inherit;}
+  .ic-price .p-sync:disabled{opacity:.45;}
+  .ic-price .p-when{font-size:11px;color:var(--ink-soft);font-weight:400;margin-left:2px;}
+  @keyframes gspin{to{transform:rotate(360deg);}}
+  .spin{display:inline-block;animation:gspin .8s linear infinite;}
+
+  .price-sync-bar{display:flex;align-items:center;gap:10px;margin:-4px 0 12px;}
+  .price-sync-bar button{flex-shrink:0;border:1px solid var(--line);background:var(--surface);
+    color:var(--accent);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;
+    font-family:inherit;display:flex;align-items:center;gap:6px;}
+  .price-sync-bar button:disabled{opacity:.5;}
+  .price-sync-bar .sync-msg{font-size:12px;color:var(--ink-soft);line-height:1.35;}
+  .price-sync-bar .sync-msg.err{color:var(--warn);}
 
   .lot-list{padding:6px 14px 4px;}
   .lot-list .lot-hd{display:flex;justify-content:space-between;align-items:center;
@@ -882,8 +896,49 @@ function accountBalance(acc, transactions){
   return bal;
 }
 
-/* 國泰單筆手續費（可在每筆買進調整） */
-const DEFAULT_FEE = 1;
+/* ── 台股收盤價自動更新（證交所 OpenAPI，上市股票）──
+   一次回傳全市場最近交易日收盤價，所以多檔持股共用同一次請求。*/
+const TWSE_ENDPOINT = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL";
+let _twseCache = { map:null, ts:0 };
+async function fetchTwseCloses(force){
+  const FRESH = 10*60*1000; // 10 分鐘內不重抓
+  if(!force && _twseCache.map && (Date.now()-_twseCache.ts) < FRESH) return _twseCache.map;
+  let rows;
+  try{
+    const res = await fetch(TWSE_ENDPOINT, {cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    rows = await res.json();
+  }catch(err){
+    const e = new Error("連線失敗，請確認網路後再試");
+    e.kind = "network";
+    throw e;
+  }
+  if(!Array.isArray(rows) || !rows.length){
+    const e = new Error("證交所暫時沒有回傳資料"); e.kind="empty"; throw e;
+  }
+  const map = {};
+  rows.forEach(r=>{
+    const code = String(r.Code||"").trim();
+    const raw = String(r.ClosingPrice||"").replace(/,/g,"").trim();
+    const p = parseFloat(raw);
+    if(code && !isNaN(p) && p>0) map[code] = p;
+  });
+  _twseCache = { map, ts: Date.now() };
+  return map;
+}
+/* 回傳 {updated:[...], missing:[...]}，missing 代表查無代號（多半是上櫃或代號打錯） */
+async function autoUpdatePrices(invs, applyPatch, force){
+  const map = await fetchTwseCloses(force);
+  const updated = [], missing = [];
+  invs.forEach(inv=>{
+    const code = String(inv.symbol||"").trim();
+    const p = map[code];
+    if(p==null){ missing.push(code); return; }
+    applyPatch(inv.id, { currentPrice:p, priceUpdatedAt: new Date().toISOString() });
+    updated.push(code);
+  });
+  return { updated, missing };
+}
 /* 取得正規化的分筆買進清單；相容舊資料（把整包 shares/avgCost 當成一筆） */
 function invLots(inv){
   if(Array.isArray(inv.lots) && inv.lots.length) return inv.lots;
@@ -2240,6 +2295,18 @@ function InvestmentModal({initial, addLot, onSave, onClose}){
 /* 只更新市價的極簡 sheet（最高頻動作） */
 function PriceModal({inv, onSave, onClose}){
   const [price, setPrice] = useState(String(inv.currentPrice||""));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  async function grab(){
+    setBusy(true); setErr("");
+    try{
+      const map = await fetchTwseCloses(true);
+      const p = map[String(inv.symbol||"").trim()];
+      if(p==null) setErr("查無此代號（可能是上櫃股），請手動輸入");
+      else setPrice(String(p));
+    }catch(e){ setErr("抓取失敗："+e.message); }
+    finally{ setBusy(false); }
+  }
   return (
     <div className="sheet-overlay" onClick={onClose}>
       <div className="sheet" onClick={e=>e.stopPropagation()} style={{maxWidth:340}}>
@@ -2250,9 +2317,16 @@ function PriceModal({inv, onSave, onClose}){
           <label>目前市價（每股 NT$）</label>
           <input type="number" inputMode="decimal" autoFocus value={price} onChange={e=>setPrice(e.target.value)} placeholder="例如 100.15" />
         </div>
+        <button className="lot-add-btn" disabled={busy} onClick={grab}>
+          <i className={"ph ph-arrows-clockwise"+(busy?" spin":"")}></i> {busy?"抓取中…":"抓取最新收盤價"}
+        </button>
+        {err && <div style={{fontSize:12,color:"var(--warn)",marginTop:8}}>{err}</div>}
         <div className="btn-row">
           <button className="btn ghost" onClick={onClose}>取消</button>
-          <button className="btn primary" onClick={()=>{ const p=parseFloat(price); onSave({currentPrice:isNaN(p)?0:p, updatedAt:toDateStr(new Date())}); }}>儲存</button>
+          <button className="btn primary" onClick={()=>{
+            const p=parseFloat(price);
+            onSave({currentPrice:isNaN(p)?0:p, priceUpdatedAt:new Date().toISOString(), updatedAt:toDateStr(new Date())});
+          }}>儲存</button>
         </div>
       </div>
     </div>
@@ -3380,8 +3454,9 @@ function AccountsSection({accounts, transactions, categories, onViewTx, onAddAcc
   );
 }
 
-function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice}){
+function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice, onSyncPrice}){
   const [open, setOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const value = invMarketValue(inv);
   const cost = invCostBasis(inv);
   const gain = invGain(inv);
@@ -3413,9 +3488,23 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice}){
         <div className="ic-metric"><div className="m-lbl">成本（含手續費）</div><div className="m-val">{fmtMoney(cost)}</div></div>
         <div className="ic-metric"><div className="m-lbl">成交均價</div><div className="m-val">{avg.toFixed(2)}</div></div>
         <div className="ic-metric"><div className="m-lbl">配息（實拿）</div><div className="m-val">{fmtMoney(div)}</div></div>
-        <div className="ic-price" onClick={()=>onUpdatePrice(inv)}>
-          <span className="p-lbl"><i className="ph ph-arrows-clockwise"></i>市價（點我更新）</span>
-          <span className="p-val">{price?price:"—"} <i className="ph ph-pencil-simple"></i></span>
+        <div className="ic-price">
+          <span className="p-lbl" onClick={()=>onUpdatePrice(inv)}>
+            市價
+            {inv.priceUpdatedAt &&
+              <span className="p-when">收盤 {String(inv.priceUpdatedAt).slice(5,10)}</span>}
+          </span>
+          <span className="p-val">
+            <span onClick={()=>onUpdatePrice(inv)}>{price?price:"—"}</span>
+            <button className="p-sync" disabled={syncing} title="抓取最新收盤價"
+              onClick={async(e)=>{
+                e.stopPropagation();
+                setSyncing(true);
+                try{ await onSyncPrice(inv); } finally { setSyncing(false); }
+              }}>
+              <i className={"ph ph-arrows-clockwise"+(syncing?" spin":"")}></i>
+            </button>
+          </span>
         </div>
       </div>
 
@@ -3471,10 +3560,40 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice}){
 function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onDeleteInvestment}){
   const [modal, setModal] = useState(null);
   const [priceModal, setPriceModal] = useState(null);
+  const [syncAll, setSyncAll] = useState(false);
+  const [syncMsg, setSyncMsg] = useState(null); // {text, err}
+
   function handleDelete(inv){
     if(!confirm("確定刪除「"+inv.name+"」整檔持股（含所有買進紀錄）？")) return;
     onDeleteInvestment(inv.id);
   }
+
+  /* 單檔更新（卡片上的循環箭頭） */
+  async function syncOne(inv){
+    setSyncMsg(null);
+    try{
+      const r = await autoUpdatePrices([inv], onEditInvestment, false);
+      if(r.missing.length){
+        setSyncMsg({text:"查無代號 "+r.missing.join("、")+"，可能是上櫃股或代號有誤，請手動輸入", err:true});
+      }
+    }catch(err){
+      setSyncMsg({text:"更新失敗："+err.message+"（可手動輸入市價）", err:true});
+    }
+  }
+
+  /* 全部更新：只打一次 API */
+  async function syncEverything(){
+    setSyncAll(true); setSyncMsg(null);
+    try{
+      const r = await autoUpdatePrices(investments, onEditInvestment, true);
+      let t = "已更新 "+r.updated.length+" 檔收盤價";
+      if(r.missing.length) t += "；查無 "+r.missing.join("、")+"（請手動輸入）";
+      setSyncMsg({text:t, err:r.missing.length>0});
+    }catch(err){
+      setSyncMsg({text:"更新失敗："+err.message+"（可手動輸入市價）", err:true});
+    }finally{ setSyncAll(false); }
+  }
+
   const totalValue = investments.reduce((s,i)=>s+invMarketValue(i),0);
   const totalCost = investments.reduce((s,i)=>s+invCostBasis(i),0);
   const totalDiv = investments.reduce((s,i)=>s+invTotalDividends(i),0);
@@ -3497,6 +3616,15 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
           <div className="row"><span className="lbl">總配息（實拿）</span><span className="val">{fmtMoney(totalDiv)}</span></div>
         </div>
       }
+      {investments.length>0 &&
+        <div className="price-sync-bar">
+          <button disabled={syncAll} onClick={syncEverything}>
+            <i className={"ph ph-arrows-clockwise"+(syncAll?" spin":"")}></i>
+            {syncAll?"更新中…":"更新收盤價"}
+          </button>
+          {syncMsg && <span className={"sync-msg"+(syncMsg.err?" err":"")}>{syncMsg.text}</span>}
+        </div>
+      }
       <div className="acc-section">
         <div className="acc-section-title">
           <h3>📈 持股</h3>
@@ -3508,6 +3636,7 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
             onEdit={(i)=>setModal({type:"edit", initial:i})}
             onAddLot={(i)=>setModal({type:"edit", initial:i, addLot:true})}
             onUpdatePrice={(i)=>setPriceModal(i)}
+            onSyncPrice={syncOne}
             onDelete={handleDelete} />
         )}
       </div>
