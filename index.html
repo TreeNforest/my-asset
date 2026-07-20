@@ -3068,12 +3068,13 @@ function CalendarTab({categories, accounts, monthTx, cursorMonth, onAddOnDate, o
   );
 }
 
-function LineChart({series}){
+function LineChart({series, dots}){
   const W = 340, H = 200, PL = 62, PB = 52, PR = 10, PT = 14;
   const chartW = W - PL - PR;
   const chartH = H - PT - PB;
   const n = series[0] ? series[0].values.length : 0;
   if(n===0) return <div className="empty-hint">還沒有資料</div>;
+  const showDots = dots===undefined ? true : dots;   // 未指定時維持原本一律畫點的行為
 
   const allVals = series.flatMap(s=>s.values).filter(v=>isFinite(v));
   const rawMin = Math.min(...allVals);
@@ -3117,9 +3118,11 @@ function LineChart({series}){
             <g key={si}>
               <polyline points={pts} fill="none" stroke={s.color} strokeWidth={2.5}
                 strokeLinejoin="round" strokeLinecap="round"/>
-              {s.values.map((v,i)=>(
-                <circle key={i} cx={xPos(i)} cy={yPos(v)} r={3.5} fill={s.color} />
-              ))}
+              {showDots
+                ? s.values.map((v,i)=>(
+                    <circle key={i} cx={xPos(i)} cy={yPos(v)} r={3.5} fill={s.color} />
+                  ))
+                : <circle cx={xPos(n-1)} cy={yPos(s.values[n-1])} r={4} fill={s.color} />}
             </g>
           );
         })}
@@ -3741,12 +3744,28 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice, onSyncPr
   );
 }
 
+const DAILY_RANGES = [
+  { key:"1M", label:"1個月", days:30 },
+  { key:"3M", label:"3個月", days:90 },
+  { key:"6M", label:"6個月", days:180 },
+  { key:"ALL", label:"全部", days:null },
+];
 function InvestDailyChart({investments}){
   const [history, setHistory] = useState(undefined); // undefined=載入中, null=沒有檔案, {}=資料
+  const [range, setRange] = useState("ALL");
   useEffect(()=>{ fetchPriceHistory().then(setHistory); }, []);
 
   const series = useMemo(()=>investDailySeries(investments, history||{}), [investments, history]);
-  const n = series.dates.length;
+
+  const view = useMemo(()=>{
+    const opt = DAILY_RANGES.find(o=>o.key===range);
+    if(!opt || opt.days==null) return series;
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-opt.days);
+    const cutoffStr = toDateStr(cutoff);
+    const start = series.dates.findIndex(d=>d>=cutoffStr);
+    const from = start===-1 ? series.dates.length : start;
+    return { dates:series.dates.slice(from), values:series.values.slice(from), costs:series.costs.slice(from) };
+  }, [series, range]);
 
   if(history===undefined){
     return <div className="daily-chart-card"><div className="empty-hint">載入每日股價中…</div></div>;
@@ -3762,22 +3781,23 @@ function InvestDailyChart({investments}){
       </div>
     );
   }
-  if(n<2){
+  if(series.dates.length<2){
     return (
       <div className="daily-chart-card">
         <div className="dc-title">持股每日變動</div>
-        <div className="empty-hint">歷史資料還太少（目前 {n} 天），累積幾個交易日後圖表會自動出現</div>
+        <div className="empty-hint">歷史資料還太少（目前 {series.dates.length} 天），累積幾個交易日後圖表會自動出現</div>
       </div>
     );
   }
 
-  const labels = series.dates.map(d=>d.slice(5));
+  const n = view.dates.length;
+  const labels = view.dates.map(d=>d.slice(5));
   const chartSeries = [
-    { label:"現值", color:"var(--tw-up)", values:series.values, labels },
-    { label:"成本", color:"var(--ink-soft)", values:series.costs, labels },
+    { label:"現值", color:"var(--tw-up)", values:view.values, labels },
+    { label:"成本", color:"var(--ink-soft)", values:view.costs, labels },
   ];
-  const lastVal = series.values[n-1], lastCost = series.costs[n-1];
-  const prevVal = series.values[n-2], prevCost = series.costs[n-2];
+  const lastVal = n?view.values[n-1]:0, lastCost = n?view.costs[n-1]:0;
+  const prevVal = n>1?view.values[n-2]:lastVal, prevCost = n>1?view.costs[n-2]:lastCost;
   const gain = lastVal - lastCost;
   const dayChange = (lastVal-lastCost) - (prevVal-prevCost); // 較上一個交易日,損益的變化量
   const dCls = dayChange>=0 ? "tw-up":"tw-down", dSign = dayChange>=0?"+":"";
@@ -3785,16 +3805,27 @@ function InvestDailyChart({investments}){
 
   return (
     <div className="daily-chart-card">
-      <div className="dc-title">持股每日變動<span className="dc-range">{series.dates[0].slice(5)} 起，共 {n} 個交易日</span></div>
-      <LineChart series={chartSeries} />
-      <div className="dc-legend">
-        <span><i className="dc-dot" style={{background:"var(--tw-up)"}}></i>現值</span>
-        <span><i className="dc-dot" style={{background:"var(--ink-soft)"}}></i>成本</span>
+      <div className="dc-title">持股每日變動</div>
+      <div className="sfp-period-tabs" style={{margin:"0 16px 12px"}}>
+        {DAILY_RANGES.map(o=>
+          <button key={o.key} className={range===o.key?"active":""} onClick={()=>setRange(o.key)}>{o.label}</button>
+        )}
       </div>
-      <div className="dc-foot">
-        <div><span className="lbl">目前損益</span><span className={"val "+gCls}>{gSign}{fmtMoney(gain)}</span></div>
-        <div><span className="lbl">較上一交易日</span><span className={"val "+dCls}>{dSign}{fmtMoney(dayChange)}</span></div>
-      </div>
+      {n<2
+        ? <div className="empty-hint">這個區間內沒有資料，試試看更長的區間</div>
+        : <>
+            <div className="dc-range" style={{padding:"0 16px 6px"}}>{view.dates[0].slice(5)} 起，共 {n} 個交易日</div>
+            <LineChart series={chartSeries} dots={false} />
+            <div className="dc-legend">
+              <span><i className="dc-dot" style={{background:"var(--tw-up)"}}></i>現值</span>
+              <span><i className="dc-dot" style={{background:"var(--ink-soft)"}}></i>成本</span>
+            </div>
+            <div className="dc-foot">
+              <div><span className="lbl">目前損益</span><span className={"val "+gCls}>{gSign}{fmtMoney(gain)}</span></div>
+              <div><span className="lbl">較上一交易日</span><span className={"val "+dCls}>{dSign}{fmtMoney(dayChange)}</span></div>
+            </div>
+          </>
+      }
     </div>
   );
 }
