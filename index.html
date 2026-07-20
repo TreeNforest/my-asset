@@ -579,6 +579,21 @@
   .price-sync-bar .sync-msg{font-size:12px;color:var(--ink-soft);line-height:1.35;}
   .price-sync-bar .sync-msg.err{color:var(--warn);}
 
+  .daily-chart-card{background:var(--surface);border-radius:var(--radius);padding:16px 4px 16px 0;margin-bottom:14px;
+    box-shadow:0 1px 3px rgba(60,50,40,.06);}
+  html.dark .daily-chart-card{border:1px solid #2C3C28;}
+  .daily-chart-card .dc-title{font-size:15px;font-weight:700;padding:0 16px 10px;display:flex;
+    align-items:baseline;gap:8px;flex-wrap:wrap;}
+  .daily-chart-card .dc-range{font-size:11px;font-weight:400;color:var(--ink-soft);}
+  .daily-chart-card .empty-hint{margin:0 16px;}
+  .daily-chart-card .dc-legend{display:flex;gap:16px;padding:6px 16px 0;font-size:12px;color:var(--ink-soft);}
+  .daily-chart-card .dc-legend .dc-dot{display:inline-block;width:9px;height:9px;border-radius:50%;
+    margin-right:5px;vertical-align:middle;}
+  .daily-chart-card .dc-foot{display:flex;gap:10px;padding:12px 16px 0;border-top:1px solid var(--line);margin-top:12px;}
+  .daily-chart-card .dc-foot > div{flex:1;padding-top:10px;}
+  .daily-chart-card .dc-foot .lbl{font-size:11px;color:var(--ink-soft);display:block;}
+  .daily-chart-card .dc-foot .val{font-size:16px;font-weight:700;}
+
   .lot-list{padding:6px 14px 4px;}
   .lot-list .lot-hd{display:flex;justify-content:space-between;align-items:center;
     font-size:12px;color:var(--ink-soft);padding:6px 0 8px;}
@@ -898,6 +913,70 @@ function accountBalance(acc, transactions){
 
 /* 國泰單筆手續費（可在每筆買進調整） */
 const DEFAULT_FEE = 1;
+
+/* ── 持股每日變動圖表 ──────────────────────────── */
+/* 讀取 GitHub Action 產生的完整歷史收盤價；檔案不存在或連不上回傳 null */
+async function fetchPriceHistory(){
+  try{
+    const data = await getJSON("./price-history.json?t="+Date.now(), 8000);
+    return (data && typeof data==="object") ? data : {};
+  }catch(e){
+    return null;
+  }
+}
+
+/* 把持股(多檔)換算成「每個交易日」的總現值/總成本序列
+   交易日曆 = 各檔歷史資料裡出現過的日期聯集(只有真正開盤的日子才有收盤價)
+   某檔在某天缺資料時，往前找最近一個有資料的交易日頂替(carry-forward)；
+   完全沒有歷史資料可用時，退回「當時的成本」計價(等同於當天損益顯示 0)。 */
+function investDailySeries(investments, priceHistory){
+  const todayStr = toDateStr(new Date());
+  const held = (investments||[]).filter(inv=>invLots(inv).length);
+  if(!held.length || !priceHistory) return { dates:[], values:[], costs:[] };
+
+  const dateSet = new Set();
+  held.forEach(inv=>{
+    const h = priceHistory[String(inv.symbol||"").trim()];
+    if(h) Object.keys(h).forEach(d=>dateSet.add(d));
+  });
+  const hasLivePrice = held.some(inv=>(+inv.currentPrice||0)>0);
+  if(hasLivePrice) dateSet.add(todayStr);   // 讓圖表能延伸到「現在」，即使今天還沒收在歷史檔裡
+
+  let earliestLot = null;
+  held.forEach(inv=>invLots(inv).forEach(l=>{
+    if(l.date && (!earliestLot || l.date<earliestLot)) earliestLot=l.date;
+  }));
+  if(!earliestLot) return { dates:[], values:[], costs:[] };
+
+  const dates = [...dateSet].filter(d=>d>=earliestLot && d<=todayStr).sort();
+  if(!dates.length) return { dates:[], values:[], costs:[] };
+
+  const values=[], costs=[];
+  dates.forEach(day=>{
+    let val=0, cost=0;
+    held.forEach(inv=>{
+      const lots = invLots(inv).filter(l=>(l.date||"")<=day);
+      if(!lots.length) return;
+      const sh = lots.reduce((s,l)=>s+(+l.shares||0),0);
+      const lotsCost = lots.reduce((s,l)=>s+lotCost(l),0);
+      cost += lotsCost;
+      const hist = priceHistory[String(inv.symbol||"").trim()];
+      let price = null;
+      if(hist && hist[day]!=null){
+        price = hist[day];                                   // 歷史檔已有這天的收盤價，最準
+      }else if(day===todayStr && (+inv.currentPrice||0)>0){
+        price = +inv.currentPrice;                            // 今天且歷史檔還沒收錄 → 用手動/自動更新的最新市價
+      }else if(hist){
+        const keys = Object.keys(hist).filter(d=>d<=day);
+        if(keys.length) price = hist[keys.sort()[keys.length-1]];  // 往前找最近一個交易日(週末/假日)
+      }
+      val += price!=null ? sh*price : lotsCost;  // 完全沒資料 → 視同無損益
+    });
+    values.push(Math.round(val));
+    costs.push(Math.round(cost));
+  });
+  return { dates, values, costs };
+}
 
 /* ── 台股報價自動更新 ──
    瀏覽器直連證交所會被 CORS 擋掉，所以依序嘗試多個來源，哪個通就用哪個：
@@ -3662,6 +3741,64 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice, onSyncPr
   );
 }
 
+function InvestDailyChart({investments}){
+  const [history, setHistory] = useState(undefined); // undefined=載入中, null=沒有檔案, {}=資料
+  useEffect(()=>{ fetchPriceHistory().then(setHistory); }, []);
+
+  const series = useMemo(()=>investDailySeries(investments, history||{}), [investments, history]);
+  const n = series.dates.length;
+
+  if(history===undefined){
+    return <div className="daily-chart-card"><div className="empty-hint">載入每日股價中…</div></div>;
+  }
+  if(history===null){
+    return (
+      <div className="daily-chart-card">
+        <div className="dc-title">持股每日變動</div>
+        <div className="empty-hint">
+          還沒有歷史股價資料。需要先在 repo 設定 <code>.github/workflows/update-prices.yml</code>
+          （抓取每日收盤價的自動化），跑過一次之後這裡就會出現趨勢圖。
+        </div>
+      </div>
+    );
+  }
+  if(n<2){
+    return (
+      <div className="daily-chart-card">
+        <div className="dc-title">持股每日變動</div>
+        <div className="empty-hint">歷史資料還太少（目前 {n} 天），累積幾個交易日後圖表會自動出現</div>
+      </div>
+    );
+  }
+
+  const labels = series.dates.map(d=>d.slice(5));
+  const chartSeries = [
+    { label:"現值", color:"var(--tw-up)", values:series.values, labels },
+    { label:"成本", color:"var(--ink-soft)", values:series.costs, labels },
+  ];
+  const lastVal = series.values[n-1], lastCost = series.costs[n-1];
+  const prevVal = series.values[n-2], prevCost = series.costs[n-2];
+  const gain = lastVal - lastCost;
+  const dayChange = (lastVal-lastCost) - (prevVal-prevCost); // 較上一個交易日,損益的變化量
+  const dCls = dayChange>=0 ? "tw-up":"tw-down", dSign = dayChange>=0?"+":"";
+  const gCls = gain>=0 ? "tw-up":"tw-down", gSign = gain>=0?"+":"";
+
+  return (
+    <div className="daily-chart-card">
+      <div className="dc-title">持股每日變動<span className="dc-range">{series.dates[0].slice(5)} 起，共 {n} 個交易日</span></div>
+      <LineChart series={chartSeries} />
+      <div className="dc-legend">
+        <span><i className="dc-dot" style={{background:"var(--tw-up)"}}></i>現值</span>
+        <span><i className="dc-dot" style={{background:"var(--ink-soft)"}}></i>成本</span>
+      </div>
+      <div className="dc-foot">
+        <div><span className="lbl">目前損益</span><span className={"val "+gCls}>{gSign}{fmtMoney(gain)}</span></div>
+        <div><span className="lbl">較上一交易日</span><span className={"val "+dCls}>{dSign}{fmtMoney(dayChange)}</span></div>
+      </div>
+    </div>
+  );
+}
+
 function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onDeleteInvestment}){
   const [modal, setModal] = useState(null);
   const [priceModal, setPriceModal] = useState(null);
@@ -3740,6 +3877,7 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
             </span>}
         </div>
       }
+      {investments.length>0 && <InvestDailyChart investments={investments} />}
       <div className="acc-section">
         <div className="acc-section-title">
           <h3>📈 持股</h3>
