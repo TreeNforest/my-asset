@@ -896,6 +896,9 @@ function accountBalance(acc, transactions){
   return bal;
 }
 
+/* 國泰單筆手續費（可在每筆買進調整） */
+const DEFAULT_FEE = 1;
+
 /* ── 台股報價自動更新 ──
    瀏覽器直連證交所會被 CORS 擋掉，所以依序嘗試多個來源，哪個通就用哪個：
    1. ./prices.json      同網域快取（可用 GitHub Actions 每天產生，最快最穩）
