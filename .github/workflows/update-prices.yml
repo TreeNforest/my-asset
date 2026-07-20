@@ -2,8 +2,7 @@ name: 更新台股報價
 
 on:
   schedule:
-    # 台灣時間週一～週五 14:30 與 16:00 各跑一次（收盤後，UTC 06:30 / 08:00）
-    # 跑兩次是保險：萬一第一次資料還沒出來，第二次會補上
+    # 台灣時間週一～週五 14:30 與 16:00 各跑一次(收盤後)= UTC 06:30 / 08:00
     - cron: '30 6 * * 1-5'
     - cron: '0 8 * * 1-5'
   workflow_dispatch:        # 也可在 Actions 頁面手動執行
@@ -17,100 +16,133 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 抓取股價
+      - name: 抓取每日收盤價(含歷史)
         run: |
           python3 - <<'PY'
           import json, urllib.request, datetime, os, time
 
-          # ⬇️ 想追蹤的股票代號寫這裡
-          CODES = ["0050", "2330"]
+          # ⬇️ 想追蹤的股票代號寫這裡，值是「從哪一天開始回補歷史」
+          #    建議設成你第一次買進那檔股票的日期(或更早)
+          CODES = {
+              "0050": "2026-06-01",
+              "2330": "2026-06-01",
+          }
 
+          MAX_BACKFILL_MONTHS = 36   # 安全上限，避免日期設太早導致跑太久
           UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
           def get(url):
               req = urllib.request.Request(url, headers=UA)
               return json.load(urllib.request.urlopen(req, timeout=30))
 
-          prices = {}      # code -> price
-          trade_date = ""  # YYYY-MM-DD，實際交易日
+          def roc_to_iso(roc_date):
+              # "115/06/02" -> "2026-06-02"
+              y, m, d = roc_date.split("/")
+              return "%04d-%02d-%02d" % (int(y) + 1911, int(m), int(d))
 
-          # ── 來源 A：證交所即時報價（收盤後立刻有值，且回傳含交易日期）──
-          for prefix in ("tse", "otc"):
-              missing = [c for c in CODES if c not in prices]
-              if not missing:
-                  break
+          def month_range(start_ym, end_ym, cap):
+              y, m = start_ym
+              ey, em = end_ym
+              months = []
+              while (y, m) <= (ey, em) and len(months) < cap:
+                  months.append((y, m))
+                  m += 1
+                  if m > 12:
+                      m = 1
+                      y += 1
+              return months
+
+          def fetch_stock_month(code, year, month):
+              url = ("https://www.twse.com.tw/exchangeReport/STOCK_DAY"
+                     "?response=json&date=%04d%02d01&stockNo=%s" % (year, month, code))
+              data = get(url)
+              out = {}
+              if data.get("stat") != "OK":
+                  return out
+              fields = data.get("fields", [])
+              close_idx = fields.index("收盤價") if "收盤價" in fields else 6
+              for row in data.get("data", []):
+                  try:
+                      iso = roc_to_iso(row[0])
+                  except Exception:
+                      continue
+                  raw = str(row[close_idx]).replace(",", "").strip()
+                  try:
+                      p = float(raw)
+                  except ValueError:
+                      continue
+                  if p > 0:
+                      out[iso] = p
+              return out
+
+          # 讀取既有歷史資料(累加式，不會整份覆蓋)
+          history = {}
+          if os.path.exists("price-history.json"):
               try:
-                  ex = "|".join(f"{prefix}_{c}.tw" for c in missing)
-                  data = get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
-                             f"?json=1&delay=0&ex_ch={ex}")
-                  for m in data.get("msgArray", []):
-                      code = str(m.get("c", "")).strip()
-                      # z=成交價；收盤後若無成交退回 y=昨收
-                      for key in ("z", "y", "o"):
-                          raw = str(m.get(key, "")).replace(",", "").strip()
-                          try:
-                              p = float(raw)
-                          except ValueError:
-                              continue
-                          if p > 0:
-                              prices[code] = p
-                              d = str(m.get("d", "")).strip()   # 20260720
-                              if len(d) == 8 and d > trade_date.replace("-", ""):
-                                  trade_date = f"{d[0:4]}-{d[4:6]}-{d[6:8]}"
-                              break
-                  print(f"來源 A({prefix}) 後:", prices, trade_date)
-                  time.sleep(2)   # 尊重對方的頻率限制
-              except Exception as e:
-                  print(f"來源 A({prefix}) 失敗:", e)
-
-          # ── 來源 B：證交所每日收盤行情（備援，僅上市；資料有時較晚才更新）──
-          missing = [c for c in CODES if c not in prices]
-          if missing:
-              try:
-                  rows = get("https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL")
-                  for r in rows:
-                      code = str(r.get("Code", "")).strip()
-                      if code in missing:
-                          raw = str(r.get("ClosingPrice", "")).replace(",", "").strip()
-                          try:
-                              p = float(raw)
-                              if p > 0:
-                                  prices[code] = p
-                          except ValueError:
-                              pass
-                  print("來源 B 後:", prices)
-              except Exception as e:
-                  print("來源 B 失敗:", e)
-
-          if not prices:
-              print("⚠️ 完全沒抓到，保留原本的 prices.json")
-              raise SystemExit(0)
-
-          # 保留舊資料中這次沒抓到的代號，避免被清掉
-          if os.path.exists("prices.json"):
-              try:
-                  old = json.load(open("prices.json", encoding="utf-8"))
-                  for k, v in (old.get("prices") or {}).items():
-                      prices.setdefault(k, v)
-                  if not trade_date:
-                      trade_date = old.get("tradeDate", "")
+                  history = json.load(open("price-history.json", encoding="utf-8"))
               except Exception:
-                  pass
+                  history = {}
 
-          out = {
-              "tradeDate": trade_date,     # 真正的交易日
+          today = datetime.date.today()
+
+          for code, since in CODES.items():
+              hist = history.get(code, {})
+              if hist:
+                  # 已經有資料了，只需補上最近兩個月(追上最新收盤 + 修正假日缺漏)
+                  py, pm = today.year, today.month - 1
+                  if pm < 1:
+                      py -= 1; pm = 12
+                  start_ym = (py, pm)
+              else:
+                  # 第一次抓這檔股票，從設定的日期開始整段回補
+                  try:
+                      since_date = datetime.date.fromisoformat(since)
+                  except Exception:
+                      since_date = today
+                  start_ym = (since_date.year, since_date.month)
+              end_ym = (today.year, today.month)
+
+              for (y, m) in month_range(start_ym, end_ym, MAX_BACKFILL_MONTHS):
+                  try:
+                      got = fetch_stock_month(code, y, m)
+                      hist.update(got)
+                      print("%s %04d-%02d：取得 %d 天" % (code, y, m, len(got)))
+                  except Exception as e:
+                      print("%s %04d-%02d 失敗：%s" % (code, y, m, e))
+                  time.sleep(1.5)   # 對證交所客氣一點
+
+              history[code] = hist
+
+          # 寫入完整歷史檔(供每日變動圖表使用)
+          with open("price-history.json", "w", encoding="utf-8") as f:
+              json.dump(history, f, ensure_ascii=False, indent=2, sort_keys=True)
+
+          # 由歷史資料推導「目前市價快照」，維持原本 prices.json 的相容格式
+          prices = {}
+          trade_date = ""
+          for code, hist in history.items():
+              if not hist:
+                  continue
+              latest = max(hist.keys())
+              prices[code] = hist[latest]
+              if latest > trade_date:
+                  trade_date = latest
+
+          snapshot = {
+              "tradeDate": trade_date,
               "updatedAt": datetime.datetime.utcnow().isoformat() + "Z",
               "prices": prices,
           }
           with open("prices.json", "w", encoding="utf-8") as f:
-              json.dump(out, f, ensure_ascii=False, indent=2)
-          print("已寫入:", out)
+              json.dump(snapshot, f, ensure_ascii=False, indent=2)
+
+          print("完成:", snapshot)
           PY
 
       - name: Commit
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add prices.json
+          git add price-history.json prices.json
           git diff --staged --quiet || git commit -m "chore: 更新股價 $(date -u +%Y-%m-%d)"
           git push
