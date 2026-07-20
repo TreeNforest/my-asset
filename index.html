@@ -939,37 +939,46 @@ async function getJSONAnyway(url, log){
 
 /* 來源 1：同網域 prices.json（可選，設定了才有） */
 async function srcLocal(symbols){
-  const data = await getJSON("./prices.json?t="+Date.now(), 4000);
+  const data = await getJSON("./prices.json?t="+Date.now(), 6000);
+  const src = data.prices || data || {};
   const map = {};
-  Object.keys(data.prices||data||{}).forEach(k=>{
-    const p = parseFloat(String((data.prices||data)[k]).replace(/,/g,""));
+  Object.keys(src).forEach(k=>{
+    const p = parseFloat(String(src[k]).replace(/,/g,""));
     if(!isNaN(p) && p>0) map[k] = p;
   });
-  return map;
+  return { map, date: data.tradeDate || (data.updatedAt||"").slice(0,10) };
 }
 /* 來源 2：證交所即時報價（上市 tse_ / 上櫃 otc_） */
 async function misQuery(symbols, prefix, log){
-  if(!symbols.length) return {};
+  if(!symbols.length) return { map:{}, date:"" };
   const ex = symbols.map(s=>prefix+"_"+s+".tw").join("|");
   const data = await getJSONAnyway(MIS_BASE + encodeURIComponent(ex), log);
-  const map = {};
+  const map = {}; let date = "";
   (data.msgArray||[]).forEach(m=>{
     // z=成交價，收盤後或無成交時退回 y=昨收
     const cand = [m.z, m.y, m.o].map(v=>parseFloat(String(v||"").replace(/,/g,"")));
     const p = cand.find(v=>!isNaN(v) && v>0);
-    if(m.c && p!=null) map[String(m.c).trim()] = p;
+    if(m.c && p!=null){
+      map[String(m.c).trim()] = p;
+      const d = String(m.d||"").trim();          // 20260720
+      if(d.length===8 && d>date.replace(/-/g,"")) date = d.slice(0,4)+"-"+d.slice(4,6)+"-"+d.slice(6,8);
+    }
   });
-  return map;
+  return { map, date };
 }
 async function srcMis(symbols, log){
-  const got = await misQuery(symbols, "tse", log);      // 先試上市
-  const rest = symbols.filter(s=>got[s]==null);
+  const first = await misQuery(symbols, "tse", log);      // 先試上市
+  const rest = symbols.filter(s=>first.map[s]==null);
   if(rest.length){
-    try{ Object.assign(got, await misQuery(rest, "otc", log)); }catch(e){}  // 再試上櫃
+    try{
+      const second = await misQuery(rest, "otc", log);    // 再試上櫃
+      Object.assign(first.map, second.map);
+      if(!first.date) first.date = second.date;
+    }catch(e){}
   }
-  return got;
+  return first;
 }
-/* 來源 3：證交所每日收盤行情（僅上市，資料較大） */
+/* 來源 3：證交所每日收盤行情（僅上市，資料較大且更新較慢） */
 async function srcOpenApi(symbols, log){
   const rows = await getJSONAnyway(TWSE_ENDPOINT, log);
   if(!Array.isArray(rows) || !rows.length) throw new Error("無資料");
@@ -981,15 +990,15 @@ async function srcOpenApi(symbols, log){
     const p = parseFloat(String(r.ClosingPrice||"").replace(/,/g,"").trim());
     if(!isNaN(p) && p>0) map[code] = p;
   });
-  return map;
+  return { map, date:"" };
 }
 
-let _priceCache = { map:null, ts:0, src:"" };
-/* 依序嘗試所有來源，回傳 {map, src} */
+let _priceCache = { map:null, ts:0, src:"", date:"" };
+/* 依序嘗試所有來源，回傳 {map, src, date} */
 async function fetchPrices(symbols, force){
   const FRESH = 5*60*1000;
   if(!force && _priceCache.map && (Date.now()-_priceCache.ts) < FRESH){
-    return { map:_priceCache.map, src:_priceCache.src };
+    return { map:_priceCache.map, src:_priceCache.src, date:_priceCache.date };
   }
   const sources = [
     ["本機快取", srcLocal],
@@ -1000,10 +1009,10 @@ async function fetchPrices(symbols, force){
   for(const [label, fn] of sources){
     const log = [];
     try{
-      const map = await fn(symbols, log);
-      if(map && Object.keys(map).length){
-        _priceCache = { map, ts:Date.now(), src:label };
-        return { map, src:label };
+      const r = await fn(symbols, log);
+      if(r && r.map && Object.keys(r.map).length){
+        _priceCache = { map:r.map, ts:Date.now(), src:label, date:r.date||"" };
+        return { map:r.map, src:label, date:r.date||"" };
       }
       details.push(label+"：回傳空資料");
     }catch(e){
@@ -1015,19 +1024,23 @@ async function fetchPrices(symbols, force){
   throw e;
 }
 
-/* 回傳 {updated, missing, src} */
+/* 回傳 {updated, missing, src, date} */
 async function autoUpdatePrices(invs, applyPatch, force){
   const symbols = invs.map(i=>String(i.symbol||"").trim()).filter(Boolean);
-  const { map, src } = await fetchPrices(symbols, force);
+  const { map, src, date } = await fetchPrices(symbols, force);
   const updated = [], missing = [];
   invs.forEach(inv=>{
     const code = String(inv.symbol||"").trim();
     const p = map[code];
     if(p==null){ missing.push(code); return; }
-    applyPatch(inv.id, { currentPrice:p, priceUpdatedAt: new Date().toISOString() });
+    applyPatch(inv.id, {
+      currentPrice: p,
+      priceDate: date || "",                       // 真正的交易日（可能為空）
+      priceUpdatedAt: new Date().toISOString(),    // 抓取時間
+    });
     updated.push(code);
   });
-  return { updated, missing, src };
+  return { updated, missing, src, date };
 }
 /* 取得正規化的分筆買進清單；相容舊資料（把整包 shares/avgCost 當成一筆） */
 function invLots(inv){
@@ -2416,7 +2429,7 @@ function PriceModal({inv, onSave, onClose}){
           <button className="btn ghost" onClick={onClose}>取消</button>
           <button className="btn primary" onClick={()=>{
             const p=parseFloat(price);
-            onSave({currentPrice:isNaN(p)?0:p, priceUpdatedAt:new Date().toISOString(), updatedAt:toDateStr(new Date())});
+            onSave({currentPrice:isNaN(p)?0:p, priceDate:"", priceUpdatedAt:new Date().toISOString(), updatedAt:toDateStr(new Date())});
           }}>儲存</button>
         </div>
       </div>
@@ -3582,8 +3595,9 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice, onSyncPr
         <div className="ic-price">
           <span className="p-lbl" onClick={()=>onUpdatePrice(inv)}>
             市價
-            {inv.priceUpdatedAt &&
-              <span className="p-when">收盤 {String(inv.priceUpdatedAt).slice(5,10)}</span>}
+            {inv.priceDate
+              ? <span className="p-when">{String(inv.priceDate).slice(5)} 收盤</span>
+              : (inv.priceUpdatedAt && <span className="p-when">手動</span>)}
           </span>
           <span className="p-val">
             <span onClick={()=>onUpdatePrice(inv)}>{price?price:"—"}</span>
@@ -3679,7 +3693,8 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
     setSyncAll(true); setSyncMsg(null);
     try{
       const r = await autoUpdatePrices(investments, onEditInvestment, true);
-      let t = "已更新 "+r.updated.length+" 檔（來源："+r.src+"）";
+      let t = "已更新 "+r.updated.length+" 檔";
+      t += r.date ? "（"+r.date.slice(5)+" 收盤．來源："+r.src+"）" : "（來源："+r.src+"）";
       if(r.missing.length) t += "；查無 "+r.missing.join("、")+"（請手動輸入）";
       setSyncMsg({text:t, err:r.missing.length>0});
     }catch(err){
