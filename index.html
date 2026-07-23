@@ -4137,7 +4137,7 @@ function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
 
 const PRIORITY_LABELS = {high:"高", mid:"中", low:"低"};
 
-function WishlistModal({initial, onSave, onClose}){
+function WishlistModal({initial, onSave, onDelete, onClose}){
   const [name, setName] = useState((initial&&initial.name)||"");
   const [price, setPrice] = useState(initial?String(initial.price||""):"");
   const [priority, setPriority] = useState((initial&&initial.priority)||"mid");
@@ -4189,6 +4189,14 @@ function WishlistModal({initial, onSave, onClose}){
           <button className="btn ghost" onClick={onClose}>取消</button>
           <button className="btn primary" onClick={submit}>儲存</button>
         </div>
+        {initial &&
+          <button className="btn ghost" style={{width:"100%",marginTop:8,color:"var(--warn)"}}
+            onClick={()=>{
+              if(confirm("確定刪除「"+(initial.name||"")+"」這個願望品項？")) onDelete(initial.id);
+            }}>
+            <i className="ph ph-trash" style={{marginRight:6}}></i>刪除品項
+          </button>
+        }
       </div>
     </div>
   );
@@ -4238,6 +4246,12 @@ function WishlistSection({wishlists, onAdd, onEdit, onDelete, categories, accoun
               padding:"6px 10px",fontSize:12,fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>
             購買
           </button>
+          <button onClick={()=>{
+              if(confirm("確定刪除「"+w.name+"」這個願望品項？")) onDelete(w.id);
+            }}
+            style={{background:"none",border:"none",color:"var(--ink-soft)",padding:4,flexShrink:0}}>
+            <i className="ph ph-trash" style={{fontSize:16}}></i>
+          </button>
         </div>
       ))}
 
@@ -4256,6 +4270,12 @@ function WishlistSection({wishlists, onAdd, onEdit, onDelete, categories, accoun
             <div className="name strike">{w.name}</div>
           </div>
           {w.price>0 && <span className="wish-price" style={{color:"var(--ink-soft)"}}>{fmtMoney(w.price)}</span>}
+          <button onClick={()=>{
+              if(confirm("確定刪除「"+w.name+"」這個願望品項？")) onDelete(w.id);
+            }}
+            style={{background:"none",border:"none",color:"var(--ink-soft)",padding:4,flexShrink:0}}>
+            <i className="ph ph-trash" style={{fontSize:16}}></i>
+          </button>
         </div>
       ))}
 
@@ -4265,17 +4285,12 @@ function WishlistSection({wishlists, onAdd, onEdit, onDelete, categories, accoun
       {modal &&
         <WishlistModal initial={modal.initial}
           onClose={()=>setModal(null)}
+          onDelete={async id=>{ await onDelete(id); setModal(null); }}
           onSave={async data=>{
             if(modal.initial) await onEdit(modal.initial.id, data);
             else await onAdd(data);
             setModal(null);
           }} />
-      }
-      {modal && modal.initial &&
-        <button className="btn danger" style={{width:"100%",marginTop:8}}
-          onClick={async()=>{ if(confirm("確定刪除？")) { await onDelete(modal.initial.id); setModal(null); } }}>
-          刪除此品項
-        </button>
       }
       {buyItem &&
         <AddTxModal
