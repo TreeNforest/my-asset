@@ -845,7 +845,7 @@ function groupByDate(transactions){
   });
   return Object.keys(map).sort((a,b)=>b.localeCompare(a)).map(date=>({
     date,
-    items: map[date].slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))
+    items: map[date].slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))
   }));
 }
 
@@ -2939,7 +2939,7 @@ function CalendarTab({categories, accounts, monthTx, cursorMonth, onAddOnDate, o
 
   function txOnDay(d){
     const ds = cursorMonth.getFullYear()+"-"+pad(cursorMonth.getMonth()+1)+"-"+pad(d);
-    return monthTx.filter(t=>t.date===ds).slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    return monthTx.filter(t=>t.date===ds).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   }
 
   const dayList = activeDay? txOnDay(activeDay) : [];
