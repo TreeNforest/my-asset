@@ -617,6 +617,7 @@
     border-radius:10px;padding:9px;font-size:13px;font-weight:600;display:flex;align-items:center;
     justify-content:center;gap:5px;}
   .ic-foot button.addlot{background:var(--income-soft);border-color:transparent;color:var(--income);}
+  .ic-foot button.sellbtn{background:var(--expense-soft);border-color:transparent;color:var(--expense);}
 
   .inv-summary{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:14px;
     box-shadow:0 1px 3px rgba(60,50,40,.06);}
@@ -632,6 +633,7 @@
   /* lot 編輯器（modal 內） */
   .lot-editor{margin-top:4px;}
   .lot-edit-row{background:var(--field-bg);border-radius:10px;padding:10px;margin-bottom:8px;}
+  .lot-edit-row.sell{border-left:3px solid var(--tw-down);}
   .lot-edit-row .ler-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
   .lot-edit-row .ler-top .ler-n{font-size:12px;color:var(--ink-soft);font-weight:600;}
   .lot-edit-row .ler-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
@@ -955,11 +957,9 @@ function investDailySeries(investments, priceHistory){
   dates.forEach(day=>{
     let val=0, cost=0;
     held.forEach(inv=>{
-      const lots = invLots(inv).filter(l=>(l.date||"")<=day);
-      if(!lots.length) return;
-      const sh = lots.reduce((s,l)=>s+(+l.shares||0),0);
-      const lotsCost = lots.reduce((s,l)=>s+lotCost(l),0);
-      cost += lotsCost;
+      const pos = invPosition(inv, day);
+      if(pos.shares<=0 && pos.cost<=0) return;
+      cost += pos.cost;
       const hist = priceHistory[String(inv.symbol||"").trim()];
       let price = null;
       if(hist && hist[day]!=null){
@@ -970,7 +970,7 @@ function investDailySeries(investments, priceHistory){
         const keys = Object.keys(hist).filter(d=>d<=day);
         if(keys.length) price = hist[keys.sort()[keys.length-1]];  // 往前找最近一個交易日(週末/假日)
       }
-      val += price!=null ? sh*price : lotsCost;  // 完全沒資料 → 視同無損益
+      val += price!=null ? pos.shares*price : pos.cost;  // 完全沒資料 → 視同無損益
     });
     values.push(Math.round(val));
     costs.push(Math.round(cost));
@@ -1137,6 +1137,52 @@ function lotValue(l, price){ return (+l.shares||0)*(+price||0); }
 function lotGain(l, price){ return lotValue(l, price) - lotCost(l); }
 function lotPct(l, price){ const c=lotCost(l); return c>0 ? lotGain(l,price)/c*100 : 0; }
 
+/* 賣出紀錄：實收 = 賣出價金(捨去到整數) − 手續費 − 證交稅 */
+function invSells(inv){ return Array.isArray(inv.sells) ? inv.sells : []; }
+function sellAmount(s){ return Math.floor((+s.shares||0)*(+s.price||0)); }
+function sellNet(s){ return sellAmount(s) - (+s.fee||0) - (+s.tax||0); }
+/* ETF(代號以00開頭)證交稅0.1%，個股0.3%，僅作預設建議值，使用者可自行覆蓋 */
+function suggestTax(symbol, shares, price){
+  const rate = String(symbol||"").trim().startsWith("00") ? 0.001 : 0.003;
+  const amt = Math.floor((+shares||0)*(+price||0));
+  return amt>0 ? Math.floor(amt*rate) : 0;
+}
+
+/* 用「移動平均成本法」依時間序處理買進+賣出事件，算出目前(或某天為止)的股數與成本，
+   並記錄每一筆賣出當下的已實現損益。這是個人記帳的簡化算法：賣出時用「當下的加權平均成本」
+   認列成本，不是券商內部可能採用的先進先出配對，但足以正確反映損益趨勢。
+   upTo 不給時代表算到「現在」(全部事件都算)。 */
+function invPosition(inv, upTo){
+  const lots = invLots(inv).filter(l=>!upTo || (l.date||"")<=upTo).map(l=>({...l, _k:"buy"}));
+  const sells = invSells(inv).filter(s=>!upTo || (s.date||"")<=upTo).map(s=>({...s, _k:"sell"}));
+  const events = lots.concat(sells).sort((a,b)=>{
+    const d = (a.date||"").localeCompare(b.date||"");
+    if(d!==0) return d;
+    return (a._k==="sell"?1:0)-(b._k==="sell"?1:0);  // 同一天：買進先處理，賣出後處理
+  });
+  let shares=0, cost=0, amt=0;
+  const sellStats=[];
+  events.forEach(ev=>{
+    if(ev._k==="buy"){
+      shares += +ev.shares||0;
+      cost += lotCost(ev);
+      amt += lotAmount(ev);
+    }else{
+      const sold = Math.min(+ev.shares||0, shares);
+      const avgCost = shares>0 ? cost/shares : 0;
+      const avgAmt = shares>0 ? amt/shares : 0;
+      const costRemoved = avgCost*sold;
+      const net = sellNet(ev);
+      const realized = net - costRemoved;
+      sellStats.push({ sell:ev, sold, costRemoved, proceeds:sellAmount(ev), net, realized,
+        realizedPct: costRemoved>0 ? realized/costRemoved*100 : 0,
+        overSold: (+ev.shares||0) > shares });
+      shares -= sold; cost -= costRemoved; amt -= avgAmt*sold;
+    }
+  });
+  return { shares, cost, amt, sellStats };
+}
+
 /* 配息紀錄：實拿 = 配息金額 − 匯費／手續費 */
 function invDivs(inv){
   if(Array.isArray(inv.divs)) return inv.divs;
@@ -1146,20 +1192,23 @@ function invDivs(inv){
 function divNet(d){ return (+d.amount||0) - (+d.fee||0); }
 function invTotalDividends(inv){ return invDivs(inv).reduce((s,d)=>s+divNet(d),0); }
 
-function invTotalShares(inv){ return invLots(inv).reduce((s,l)=>s+(+l.shares||0),0); }
-function invCostBasis(inv){ return invLots(inv).reduce((s,l)=>s+lotCost(l),0); }
-/* 成交均價：券商慣例是純價金÷股數，不含手續費 */
+function invTotalShares(inv){ return invPosition(inv).shares; }
+function invCostBasis(inv){ return invPosition(inv).cost; }
+/* 成交均價：券商慣例是純價金÷股數，不含手續費(賣出後這裡也會按比例下降) */
 function invAvgCost(inv){
-  const sh = invTotalShares(inv);
-  if(sh<=0) return 0;
-  const amt = invLots(inv).reduce((s,l)=>s+(+l.shares||0)*(+l.price||0), 0);
-  return amt/sh;
+  const pos = invPosition(inv);
+  return pos.shares>0 ? pos.amt/pos.shares : 0;
 }
+function invRealizedGain(inv){ return invPosition(inv).sellStats.reduce((s,r)=>s+r.realized,0); }
+function invSellDetails(inv){ return invPosition(inv).sellStats; }
+/* 這輩子總共投入的成本(不因賣出而減少)，用來當報酬率的分母，避免賣出後分母縮小把%虛胖 */
+function invTotalCostEverInvested(inv){ return invLots(inv).reduce((s,l)=>s+lotCost(l),0); }
+
 function invMarketValue(inv){ return invTotalShares(inv) * (+inv.currentPrice||0); }
-/* 損益含息，與券商一致 */
-function invGain(inv){ return invMarketValue(inv) - invCostBasis(inv) + invTotalDividends(inv); }
+/* 總損益 = 未實現(現值-剩餘成本) + 已實現(賣出) + 配息，與券商含息損益同一套精神再加上已實現交易損益 */
+function invGain(inv){ return invMarketValue(inv) - invCostBasis(inv) + invTotalDividends(inv) + invRealizedGain(inv); }
 function invReturnPct(inv){
-  const cost = invCostBasis(inv);
+  const cost = invTotalCostEverInvested(inv);
   return cost>0 ? (invGain(inv)/cost*100) : 0;
 }
 
@@ -2323,7 +2372,11 @@ function newDiv(){
   return { id:"D"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
     date:toDateStr(new Date()), amount:"", fee:"" };
 }
-function InvestmentModal({initial, addLot, onSave, onClose}){
+function newSell(symbol){
+  return { id:"S"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    date:toDateStr(new Date()), shares:"", price:"", fee:String(DEFAULT_FEE), tax:"" };
+}
+function InvestmentModal({initial, addLot, addSell, onSave, onClose}){
   const [symbol, setSymbol] = useState((initial&&initial.symbol)||"");
   const [name, setName] = useState((initial&&initial.name)||"");
   const [currentPrice, setCurrentPrice] = useState(initial?String(initial.currentPrice||""):"");
@@ -2334,7 +2387,7 @@ function InvestmentModal({initial, addLot, onSave, onClose}){
       shares:String(l.shares??""), price:String(l.price??""),
       fee:String(l.fee??DEFAULT_FEE), kind:l.kind||"spot",
     })) : [];
-    if(!base.length || addLot) base = base.concat([newLot()]);
+    if((!base.length && !addSell) || addLot) base = base.concat([newLot()]);
     return base;
   });
   const [divs, setDivs] = useState(()=>
@@ -2344,22 +2397,54 @@ function InvestmentModal({initial, addLot, onSave, onClose}){
       amount:String(d.amount??""), fee:String(d.fee??0),
     })) : []
   );
+  const [sells, setSells] = useState(()=>{
+    let base = initial ? invSells(initial).map(s=>({
+      id:s.id||newSell().id,
+      date:s.date||toDateStr(new Date()),
+      shares:String(s.shares??""), price:String(s.price??""),
+      fee:String(s.fee??DEFAULT_FEE), tax:String(s.tax??""),
+    })) : [];
+    if(addSell) base = base.concat([newSell(symbol)]);
+    return base;
+  });
 
   function setLot(id, patch){ setLots(ls=>ls.map(l=>l.id===id?{...l,...patch}:l)); }
   function delLot(id){ setLots(ls=>ls.filter(l=>l.id!==id)); }
   function setDiv(id, patch){ setDivs(ds=>ds.map(d=>d.id===id?{...d,...patch}:d)); }
   function delDiv(id){ setDivs(ds=>ds.filter(d=>d.id!==id)); }
+  function setSell(id, patch){ setSells(ss=>ss.map(s=>s.id===id?{...s,...patch}:s)); }
+  function delSell(id){ setSells(ss=>ss.filter(s=>s.id!==id)); }
+  function fillSuggestedTax(id, shares, price){
+    setSells(ss=>ss.map(s=>{
+      if(s.id!==id || s.tax!=="") return s;   // 使用者已填過就不覆蓋
+      return {...s, tax:String(suggestTax(symbol, shares, price))};
+    }));
+  }
 
-  // 即時預覽（跟券商同一套算法）
+  // 即時預覽（跟券商同一套算法，含賣出後的移動平均成本與已實現損益）
   const preview = useMemo(()=>{
-    const clean = lots.map(l=>({shares:+l.shares||0, price:+l.price||0, fee:+l.fee||0}))
+    const cleanLots = lots.map(l=>({shares:+l.shares||0, price:+l.price||0, fee:+l.fee||0, date:l.date}))
       .filter(l=>l.shares>0);
-    const sh = clean.reduce((s,l)=>s+l.shares,0);
-    const cost = clean.reduce((s,l)=>s+Math.floor(l.shares*l.price)+l.fee, 0);
-    const amt = clean.reduce((s,l)=>s+l.shares*l.price, 0);
+    const cleanSells = sells.map(s=>({shares:+s.shares||0, price:+s.price||0, fee:+s.fee||0, tax:+s.tax||0, date:s.date}))
+      .filter(s=>s.shares>0);
+    const events = cleanLots.map(l=>({...l,_k:"buy"})).concat(cleanSells.map(s=>({...s,_k:"sell"})))
+      .sort((a,b)=>{ const d=(a.date||"").localeCompare(b.date||""); return d!==0?d:(a._k==="sell"?1:0)-(b._k==="sell"?1:0); });
+    let sh=0, cost=0, amt=0, realized=0, oversold=false;
+    events.forEach(ev=>{
+      if(ev._k==="buy"){ sh+=ev.shares; cost+=Math.floor(ev.shares*ev.price)+ev.fee; amt+=ev.shares*ev.price; }
+      else{
+        if(ev.shares>sh) oversold=true;
+        const sold=Math.min(ev.shares, sh);
+        const avgCost = sh>0?cost/sh:0, avgAmt = sh>0?amt/sh:0;
+        const costRemoved = avgCost*sold;
+        const net = Math.floor(ev.shares*ev.price) - ev.fee - ev.tax;
+        realized += net - costRemoved;
+        sh -= sold; cost -= costRemoved; amt -= avgAmt*sold;
+      }
+    });
     const netDiv = divs.reduce((s,d)=>s+((+d.amount||0)-(+d.fee||0)), 0);
-    return { sh, cost, avg: sh>0?amt/sh:0, netDiv };
-  }, [lots, divs]);
+    return { sh, cost, avg: sh>0?amt/sh:0, netDiv, realized, oversold };
+  }, [lots, sells, divs]);
 
   function submit(){
     if(!symbol.trim()){ alert("請輸入股票代號"); return; }
@@ -2371,11 +2456,15 @@ function InvestmentModal({initial, addLot, onSave, onClose}){
     const cleanDivs = divs
       .filter(d=>(+d.amount||0)!==0 || (+d.fee||0)!==0)
       .map(d=>({ id:d.id, date:d.date, amount:+d.amount||0, fee:+d.fee||0 }));
+    const cleanSells = sells
+      .filter(s=>(+s.shares||0)>0)
+      .map(s=>({ id:s.id, date:s.date, shares:+s.shares||0, price:+s.price||0,
+        fee:+s.fee||0, tax:+s.tax||0 }));
     const p = parseFloat(currentPrice);
     onSave({
       symbol: symbol.trim(), name: name.trim()||symbol.trim(),
       currentPrice: isNaN(p)?0:p,
-      lots: cleanLots, divs: cleanDivs,
+      lots: cleanLots, divs: cleanDivs, sells: cleanSells,
       totalDividends: cleanDivs.reduce((s,d)=>s+d.amount-d.fee,0),
       updatedAt: toDateStr(new Date()),
     });
@@ -2455,6 +2544,43 @@ function InvestmentModal({initial, addLot, onSave, onClose}){
           </button>
         </div>
 
+        <label style={{fontSize:13,color:"var(--ink-soft)",fontWeight:600,display:"block",margin:"14px 0 6px"}}>
+          賣出紀錄（選填）
+        </label>
+        <div className="lot-editor">
+          {sells.map((s,idx)=>{
+            const amt = Math.floor((+s.shares||0)*(+s.price||0));
+            const net = amt - (+s.fee||0) - (+s.tax||0);
+            return (
+              <div className="lot-edit-row sell" key={s.id}>
+                <div className="ler-top">
+                  <span className="ler-n">第 {idx+1} 次賣出{amt>0 && <>　實收 {fmtMoney(net)}</>}</span>
+                  <button className="lot-del" onClick={()=>delSell(s.id)}><i className="ph ph-trash"></i></button>
+                </div>
+                <div className="ler-grid">
+                  <div className="fld"><label>日期</label>
+                    <input type="date" value={s.date} onChange={e=>setSell(s.id,{date:e.target.value})} /></div>
+                  <div className="fld"><label>股數</label>
+                    <input type="number" inputMode="decimal" value={s.shares}
+                      onChange={e=>{ setSell(s.id,{shares:e.target.value}); fillSuggestedTax(s.id, e.target.value, s.price); }}
+                      placeholder="0" /></div>
+                  <div className="fld"><label>成交價</label>
+                    <input type="number" inputMode="decimal" value={s.price}
+                      onChange={e=>{ setSell(s.id,{price:e.target.value}); fillSuggestedTax(s.id, s.shares, e.target.value); }}
+                      placeholder="0" /></div>
+                  <div className="fld"><label>手續費</label>
+                    <input type="number" inputMode="decimal" value={s.fee} onChange={e=>setSell(s.id,{fee:e.target.value})} placeholder="1" /></div>
+                  <div className="fld" style={{gridColumn:"1 / -1"}}><label>證交稅（ETF約0.1%、個股約0.3%，已幫你抓）</label>
+                    <input type="number" inputMode="decimal" value={s.tax} onChange={e=>setSell(s.id,{tax:e.target.value})} placeholder="0" /></div>
+                </div>
+              </div>
+            );
+          })}
+          <button className="lot-add-btn" onClick={()=>setSells(ss=>ss.concat([newSell(symbol)]))}>
+            <i className="ph ph-plus"></i> {sells.length?"再加一次賣出":"加一次賣出"}
+          </button>
+        </div>
+
         {preview.sh>0 &&
           <div className="inv-summary" style={{margin:"12px 0 4px"}}>
             <div className="row"><span className="lbl">總股數</span><span className="val">{preview.sh}</span></div>
@@ -2462,6 +2588,16 @@ function InvestmentModal({initial, addLot, onSave, onClose}){
             <div className="row"><span className="lbl">總成本（含手續費）</span><span className="val">{fmtMoney(preview.cost)}</span></div>
             {preview.netDiv!==0 &&
               <div className="row"><span className="lbl">配息實拿</span><span className="val">{fmtMoney(preview.netDiv)}</span></div>}
+            {preview.realized!==0 &&
+              <div className="row"><span className="lbl">已實現損益</span>
+                <span className="val" style={{color:preview.realized>=0?"var(--tw-up)":"var(--tw-down)"}}>
+                  {preview.realized>=0?"+":""}{fmtMoney(preview.realized)}
+                </span></div>}
+          </div>
+        }
+        {preview.oversold &&
+          <div style={{fontSize:12,color:"var(--warn)",margin:"4px 0 8px"}}>
+            ⚠️ 賣出股數加起來比買進股數多，請確認日期或股數有沒有填錯
           </div>
         }
 
@@ -3640,7 +3776,7 @@ function AccountsSection({accounts, transactions, categories, onViewTx, onAddAcc
   );
 }
 
-function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice, onSyncPrice}){
+function InvestmentRow({inv, onEdit, onDelete, onAddLot, onAddSell, onUpdatePrice, onSyncPrice}){
   const [open, setOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const value = invMarketValue(inv);
@@ -3649,11 +3785,13 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice, onSyncPr
   const pct = invReturnPct(inv);
   const shares = invTotalShares(inv);
   const avg = invAvgCost(inv);
+  const realized = invRealizedGain(inv);
   const gCls = gain>=0 ? "tw-up" : "tw-down";
   const sign = gain>=0 ? "+" : "";
   const price = +inv.currentPrice||0;
   const lots = invLots(inv).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
   const divs = invDivs(inv).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  const sells = invSellDetails(inv).slice().sort((a,b)=>(b.sell.date||"").localeCompare(a.sell.date||""));
   const div = invTotalDividends(inv);
 
   return (
@@ -3661,7 +3799,10 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice, onSyncPr
       <div className="ic-head" onClick={()=>setOpen(o=>!o)}>
         <div className="ic-title">
           <div><span className="ic-name">{inv.name}</span><span className="ic-code">{inv.symbol}</span></div>
-          <div className="ic-shares">總股數 {shares}　·　{lots.length} 筆買進</div>
+          <div className="ic-shares">
+            總股數 {shares}　·　{lots.length} 筆買進
+            {sells.length>0 && <>　·　{sells.length} 筆賣出</>}
+          </div>
         </div>
         <div className="ic-gain">
           <div className={"g-amt "+gCls}>{sign}{fmtMoney(gain)}</div>
@@ -3672,8 +3813,16 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice, onSyncPr
       <div className="ic-metrics">
         <div className="ic-metric"><div className="m-lbl">現值</div><div className="m-val">{fmtMoney(value)}</div></div>
         <div className="ic-metric"><div className="m-lbl">成本（含手續費）</div><div className="m-val">{fmtMoney(cost)}</div></div>
-        <div className="ic-metric"><div className="m-lbl">成交均價</div><div className="m-val">{avg.toFixed(2)}</div></div>
+        <div className="ic-metric"><div className="m-lbl">成交均價</div><div className="m-val">{shares>0?avg.toFixed(2):"—"}</div></div>
         <div className="ic-metric"><div className="m-lbl">配息（實拿）</div><div className="m-val">{fmtMoney(div)}</div></div>
+        {sells.length>0 &&
+          <div className="ic-metric" style={{gridColumn:"1 / -1"}}>
+            <div className="m-lbl">已實現損益</div>
+            <div className="m-val" style={{color:realized>=0?"var(--tw-up)":"var(--tw-down)"}}>
+              {realized>=0?"+":""}{fmtMoney(realized)}
+            </div>
+          </div>
+        }
         <div className="ic-price">
           <span className="p-lbl" onClick={()=>onUpdatePrice(inv)}>
             市價
@@ -3715,6 +3864,33 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice, onSyncPr
               </div>
             );
           })}
+          {sells.length>0 &&
+            <div style={{marginTop:6}}>
+              <div className="lot-hd" style={{borderTop:"1px solid var(--line)",paddingTop:10}}>
+                <span>賣出紀錄</span><span>已實現損益</span>
+              </div>
+              {sells.map(r=>{
+                const s = r.sell;
+                const rcls = r.realized>=0?"tw-up":"tw-down", rs = r.realized>=0?"+":"";
+                return (
+                  <div className="lot-item" key={s.id}>
+                    <div className="lot-date">{(s.date||"").slice(5)}</div>
+                    <div className="lot-mid">
+                      <div className="lot-line1">
+                        <span className="lot-badge fixed" style={{background:"var(--expense-soft)",color:"var(--expense)"}}>賣出</span>
+                        <b>{s.shares}</b> 股 @ {s.price}
+                      </div>
+                      <div className="lot-line2">
+                        實收 {fmtMoney(r.net)}（費 {s.fee||0}{(+s.tax||0)>0 && <>＋稅 {s.tax}</>}）
+                        {r.overSold && <span style={{color:"var(--warn)"}}>　⚠️ 超賣</span>}
+                      </div>
+                    </div>
+                    <div className={"lot-gain "+rcls}>{rs}{fmtMoney(r.realized)}<div className="lg-pct">{rs}{r.realizedPct.toFixed(2)}%</div></div>
+                  </div>
+                );
+              })}
+            </div>
+          }
           {divs.length>0 &&
             <div style={{marginTop:6}}>
               <div className="lot-hd" style={{borderTop:"1px solid var(--line)",paddingTop:10}}>
@@ -3737,7 +3913,8 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onUpdatePrice, onSyncPr
 
       <div className="ic-foot">
         <button className="addlot" onClick={()=>onAddLot(inv)}><i className="ph ph-plus"></i>加一筆買進</button>
-        <button onClick={()=>onEdit(inv)}><i className="ph ph-pencil-line"></i>編輯</button>
+        <button className="sellbtn" onClick={()=>onAddSell(inv)}><i className="ph ph-minus"></i>賣出</button>
+        <button onClick={()=>onEdit(inv)}><i className="ph ph-pencil-line"></i></button>
         <button onClick={()=>onDelete(inv)}><i className="ph ph-trash"></i></button>
       </div>
     </div>
@@ -3873,8 +4050,10 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
   const totalValue = investments.reduce((s,i)=>s+invMarketValue(i),0);
   const totalCost = investments.reduce((s,i)=>s+invCostBasis(i),0);
   const totalDiv = investments.reduce((s,i)=>s+invTotalDividends(i),0);
-  const totalGain = totalValue - totalCost + totalDiv;
-  const totalPct = totalCost>0 ? (totalGain/totalCost*100) : 0;
+  const totalRealized = investments.reduce((s,i)=>s+invRealizedGain(i),0);
+  const totalEverInvested = investments.reduce((s,i)=>s+invTotalCostEverInvested(i),0);
+  const totalGain = totalValue - totalCost + totalDiv + totalRealized;
+  const totalPct = totalEverInvested>0 ? (totalGain/totalEverInvested*100) : 0;
   const gCls = totalGain>=0 ? "tw-up" : "tw-down";
   const sign = totalGain>=0 ? "+" : "";
 
@@ -3883,13 +4062,18 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
       {investments.length>0 &&
         <div className="inv-summary">
           <div className="is-hero">
-            <div className="h-lbl">總損益（含息）</div>
+            <div className="h-lbl">總損益（含息與已實現）</div>
             <div className={"h-amt "+gCls}>{sign}{fmtMoney(totalGain)}</div>
             <div className={"h-pct "+gCls}>{sign}{totalPct.toFixed(2)}%</div>
           </div>
           <div className="row"><span className="lbl">總現值</span><span className="val">{fmtMoney(totalValue)}</span></div>
           <div className="row"><span className="lbl">總成本</span><span className="val">{fmtMoney(totalCost)}</span></div>
           <div className="row"><span className="lbl">總配息（實拿）</span><span className="val">{fmtMoney(totalDiv)}</span></div>
+          {totalRealized!==0 &&
+            <div className="row"><span className="lbl">已實現損益</span>
+              <span className="val" style={{color:totalRealized>=0?"var(--tw-up)":"var(--tw-down)"}}>
+                {totalRealized>=0?"+":""}{fmtMoney(totalRealized)}
+              </span></div>}
         </div>
       }
       {investments.length>0 &&
@@ -3919,13 +4103,14 @@ function InvestmentsSection({investments, onAddInvestment, onEditInvestment, onD
           <InvestmentRow key={inv.id} inv={inv}
             onEdit={(i)=>setModal({type:"edit", initial:i})}
             onAddLot={(i)=>setModal({type:"edit", initial:i, addLot:true})}
+            onAddSell={(i)=>setModal({type:"edit", initial:i, addSell:true})}
             onUpdatePrice={(i)=>setPriceModal(i)}
             onSyncPrice={syncOne}
             onDelete={handleDelete} />
         )}
       </div>
       {modal &&
-        <InvestmentModal initial={modal.initial} addLot={modal.addLot}
+        <InvestmentModal initial={modal.initial} addLot={modal.addLot} addSell={modal.addSell}
           onClose={()=>setModal(null)}
           onSave={(data)=>{
             if(modal.initial) onEditInvestment(modal.initial.id, data);
