@@ -1148,9 +1148,9 @@ function suggestTax(symbol, shares, price){
   return amt>0 ? Math.floor(amt*rate) : 0;
 }
 
-/* 用「移動平均成本法」依時間序處理買進+賣出事件，算出目前(或某天為止)的股數與成本，
-   並記錄每一筆賣出當下的已實現損益。這是個人記帳的簡化算法：賣出時用「當下的加權平均成本」
-   認列成本，不是券商內部可能採用的先進先出配對，但足以正確反映損益趨勢。
+/* 用「先進先出(FIFO)」依時間序處理買進+賣出事件，與台灣券商(國泰)的配對方式一致：
+   賣出時從最早買進的批次開始扣，最早那批扣完才動下一批。
+   回傳 open = 還沒賣掉的批次(含各批剩餘股數)，可直接用來顯示庫存明細。
    upTo 不給時代表算到「現在」(全部事件都算)。 */
 function invPosition(inv, upTo){
   const lots = invLots(inv).filter(l=>!upTo || (l.date||"")<=upTo).map(l=>({...l, _k:"buy"}));
@@ -1160,28 +1160,37 @@ function invPosition(inv, upTo){
     if(d!==0) return d;
     return (a._k==="sell"?1:0)-(b._k==="sell"?1:0);  // 同一天：買進先處理，賣出後處理
   });
-  let shares=0, cost=0, amt=0;
-  const sellStats=[];
+  const open = [];        // 尚未賣出的買進批次，依買進先後排列
+  const sellStats = [];
   events.forEach(ev=>{
     if(ev._k==="buy"){
-      shares += +ev.shares||0;
-      cost += lotCost(ev);
-      amt += lotAmount(ev);
+      const sh = +ev.shares||0;
+      if(sh>0) open.push({ lot:ev, remain:sh, perCost:lotCost(ev)/sh, perAmt:lotAmount(ev)/sh });
     }else{
-      const sold = Math.min(+ev.shares||0, shares);
-      const avgCost = shares>0 ? cost/shares : 0;
-      const avgAmt = shares>0 ? amt/shares : 0;
-      const costRemoved = avgCost*sold;
+      const want = +ev.shares||0;
+      let need = want, costRemoved = 0;
+      while(need>0 && open.length){          // 從最早的批次開始扣
+        const head = open[0];
+        const take = Math.min(need, head.remain);
+        costRemoved += head.perCost*take;
+        head.remain -= take;
+        need -= take;
+        if(head.remain<=1e-9) open.shift();
+      }
       const net = sellNet(ev);
       const realized = net - costRemoved;
-      sellStats.push({ sell:ev, sold, costRemoved, proceeds:sellAmount(ev), net, realized,
+      sellStats.push({ sell:ev, sold:want-need, costRemoved, proceeds:sellAmount(ev), net, realized,
         realizedPct: costRemoved>0 ? realized/costRemoved*100 : 0,
-        overSold: (+ev.shares||0) > shares });
-      shares -= sold; cost -= costRemoved; amt -= avgAmt*sold;
+        overSold: need>0 });
     }
   });
-  return { shares, cost, amt, sellStats };
+  const shares = open.reduce((s,o)=>s+o.remain, 0);
+  const cost   = open.reduce((s,o)=>s+o.perCost*o.remain, 0);
+  const amt    = open.reduce((s,o)=>s+o.perAmt*o.remain, 0);
+  return { shares, cost, amt, sellStats, open };
 }
+/* 還沒賣掉的批次(給庫存明細顯示用)，已賣完的批次不會出現，部分賣出的只顯示剩餘股數 */
+function invOpenLots(inv){ return invPosition(inv).open; }
 
 /* 配息紀錄：實拿 = 配息金額 − 匯費／手續費 */
 function invDivs(inv){
@@ -3789,7 +3798,8 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onAddSell, onUpdatePric
   const gCls = gain>=0 ? "tw-up" : "tw-down";
   const sign = gain>=0 ? "+" : "";
   const price = +inv.currentPrice||0;
-  const lots = invLots(inv).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  /* FIFO：只顯示還沒賣掉的批次，部分賣出的只顯示剩餘股數（與國泰庫存明細一致） */
+  const lots = invOpenLots(inv).slice().sort((a,b)=>(b.lot.date||"").localeCompare(a.lot.date||""));
   const divs = invDivs(inv).slice().sort((a,b)=>(b.date||"").localeCompare(a.date||""));
   const sells = invSellDetails(inv).slice().sort((a,b)=>(b.sell.date||"").localeCompare(a.sell.date||""));
   const div = invTotalDividends(inv);
@@ -3800,7 +3810,7 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onAddSell, onUpdatePric
         <div className="ic-title">
           <div><span className="ic-name">{inv.name}</span><span className="ic-code">{inv.symbol}</span></div>
           <div className="ic-shares">
-            總股數 {shares}　·　{lots.length} 筆買進
+            總股數 {shares}　·　{lots.length} 筆庫存
             {sells.length>0 && <>　·　{sells.length} 筆賣出</>}
           </div>
         </div>
@@ -3846,9 +3856,13 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onAddSell, onUpdatePric
 
       {open &&
         <div className="lot-list">
-          <div className="lot-hd"><span>每筆買進</span><span>單筆損益（以現價估）</span></div>
-          {lots.map(l=>{
-            const lg = lotGain(l, price), lp = lotPct(l, price);
+          <div className="lot-hd"><span>庫存明細（先進先出）</span><span>單筆損益（以現價估）</span></div>
+          {lots.map(o=>{
+            const l = o.lot;
+            const openCost = o.perCost*o.remain;              // 該批「剩餘部分」的成本
+            const lg = o.remain*price - openCost;
+            const lp = openCost>0 ? lg/openCost*100 : 0;
+            const partial = o.remain < (+l.shares||0);        // 這批被賣掉一部分
             const lcls = lg>=0?"tw-up":"tw-down", ls = lg>=0?"+":"";
             return (
               <div className="lot-item" key={l.id}>
@@ -3856,9 +3870,12 @@ function InvestmentRow({inv, onEdit, onDelete, onAddLot, onAddSell, onUpdatePric
                 <div className="lot-mid">
                   <div className="lot-line1">
                     <span className={"lot-badge "+(l.kind==="fixed"?"fixed":"spot")}>{l.kind==="fixed"?"定額":"現股"}</span>
-                    <b>{l.shares}</b> 股 @ {l.price}
+                    <b>{o.remain}</b> 股 @ {l.price}
                   </div>
-                  <div className="lot-line2">成本 {fmtMoney(lotCost(l))}（含費 {l.fee||0}）</div>
+                  <div className="lot-line2">
+                    成本 {fmtMoney(openCost)}
+                    {partial && <span style={{opacity:.8}}>（原 {l.shares} 股，已賣出 {(+l.shares||0)-o.remain}）</span>}
+                  </div>
                 </div>
                 <div className={"lot-gain "+lcls}>{ls}{fmtMoney(lg)}<div className="lg-pct">{ls}{lp.toFixed(2)}%</div></div>
               </div>
