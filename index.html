@@ -493,6 +493,10 @@
   .acc-sub{font-size:13px;color:var(--ink-soft);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400;}
   .acc-row .bal{font-size:14px;color:var(--ink-soft);white-space:nowrap;}
   .acc-detail-balance{text-align:center;padding:6px 0 14px;}
+  .pay-card-btn{width:100%;padding:13px;border:none;border-radius:12px;background:var(--income-soft);
+    color:var(--income);font-size:15px;font-weight:700;font-family:inherit;display:flex;
+    align-items:center;justify-content:center;gap:7px;margin-bottom:14px;}
+  .pay-card-btn i{font-size:19px;}
   .acc-detail-balance .nw-value{font-size:26px;font-weight:700;margin-top:4px;}
   .acc-detail-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
   .acc-detail-stats .stat{background:var(--field-bg);border-radius:10px;padding:10px;text-align:center;}
@@ -3632,7 +3636,93 @@ function AccountRow({acc, transactions, dragHandlers, onView, onEdit, onDelete})
   );
 }
 
-function AccountDetailSheet({acc, transactions, categories, accounts, onViewTx, onClose}){
+/* 信用卡一鍵繳費：從活存帳戶轉帳到信用卡，沖銷欠款 */
+function PayCardModal({card, amountDue, accounts, transactions, onSave, onClose}){
+  /* 可扣款的帳戶：排除信用卡本身與其他負債帳戶 */
+  const payFrom = accounts.filter(a=>!isLiability(a.type) && !isExcluded(a));
+  const [fromId, setFromId] = useState(()=>{
+    if(card.payFromAccountId && payFrom.some(a=>a.id===card.payFromAccountId)) return card.payFromAccountId;
+    const preferred = payFrom.find(a=>a.type==="checking") || payFrom[0];
+    return preferred ? preferred.id : "";
+  });
+  const [amount, setAmount] = useState(String(Math.round(amountDue)));
+  const [date, setDate] = useState(toDateStr(new Date()));
+  const [remember, setRemember] = useState(true);
+
+  const fromAcc = accounts.find(a=>a.id===fromId);
+  const fromBal = fromAcc ? accountBalance(fromAcc, transactions) : 0;
+  const amt = Math.round(safeEval(amount));
+  const notEnough = fromAcc && amt>fromBal;
+  const partial = amt>0 && amt<Math.round(amountDue);
+
+  function submit(){
+    if(!fromId){ alert("請選擇扣款帳戶"); return; }
+    if(!(amt>0)){ alert("請輸入繳款金額"); return; }
+    onSave({
+      fromAccountId: fromId,
+      toAccountId: card.id,
+      amount: amt,
+      date,
+      note: card.name+" 繳款",
+      rememberAccount: remember ? fromId : null,
+    });
+  }
+
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>繳卡費</h2>
+        <div style={{fontSize:14,color:"var(--ink-soft)",marginBottom:12}}>
+          {card.name}　應繳 {fmtMoney(amountDue)}
+        </div>
+
+        <div className="field">
+          <label>從哪個帳戶扣款</label>
+          <select value={fromId} onChange={e=>setFromId(e.target.value)}>
+            {payFrom.length===0 && <option value="">（沒有可用的帳戶）</option>}
+            {payFrom.map(a=>
+              <option key={a.id} value={a.id}>{a.name}（{fmtMoney(accountBalance(a, transactions))}）</option>
+            )}
+          </select>
+        </div>
+
+        <div className="field">
+          <label>繳款金額</label>
+          <input type="number" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} />
+        </div>
+        {partial &&
+          <div style={{fontSize:12,color:"var(--ink-soft)",marginTop:-6,marginBottom:10}}>
+            部分繳款，剩餘 {fmtMoney(Math.round(amountDue)-amt)} 會留在卡上
+          </div>
+        }
+        {notEnough &&
+          <div style={{fontSize:12,color:"var(--warn)",marginTop:-6,marginBottom:10}}>
+            ⚠️ {fromAcc.name} 餘額只有 {fmtMoney(fromBal)}，扣款後會變成負的
+          </div>
+        }
+
+        <div className="field">
+          <label>繳款日期</label>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)} />
+        </div>
+
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--ink-soft)",margin:"4px 0 10px"}}>
+          <input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)}
+            style={{width:16,height:16}} />
+          記住這個扣款帳戶，下次自動選好
+        </label>
+
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>確認繳款</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccountDetailSheet({acc, transactions, categories, accounts, onViewTx, onPayCard, onClose}){
   const [yearFilter, setYearFilter] = useState("all");
 
   const acctTx = useMemo(()=>{
@@ -3680,12 +3770,19 @@ function AccountDetailSheet({acc, transactions, categories, accounts, onViewTx, 
         </div>
 
         <div className="acc-detail-balance">
-          <div className="nw-label">目前餘額</div>
+          <div className="nw-label">{isLiability(acc.type) ? "應繳金額" : "目前餘額"}</div>
           <div className="nw-value">{fmtMoney(currentBalance)}</div>
           {acc.type==="fixed" && acc.rate &&
             <div className="acc-sub">利率 {acc.rate}%・{acc.startDate} ~ {acc.endDate}</div>
           }
         </div>
+
+        {isLiability(acc.type) && currentBalance>0 &&
+          <button className="pay-card-btn" onClick={()=>onPayCard(acc, currentBalance)}>
+            <i className="ph ph-hand-coins"></i>
+            繳清這張卡 {fmtMoney(currentBalance)}
+          </button>
+        }
 
         <div className="acc-detail-stats">
           <div className="stat"><span>總收入</span><b className="pos">{fmtMoney(totalIncome)}</b></div>
@@ -3736,9 +3833,10 @@ function AccountDetailSheet({acc, transactions, categories, accounts, onViewTx, 
   );
 }
 
-function AccountsSection({accounts, transactions, categories, onViewTx, onAddAccount, onEditAccount, onDeleteAccount, onReorderGroup}){
+function AccountsSection({accounts, transactions, categories, onViewTx, onAddAccount, onEditAccount, onDeleteAccount, onReorderGroup, onPayCard}){
   const [modal, setModal] = useState(null); // {initial, defaultType}
   const [viewingAcc, setViewingAcc] = useState(null);
+  const [payCard, setPayCard] = useState(null); // {card, amountDue}
 
   function handleDelete(acc){
     if(!confirm("確定刪除「"+acc.name+"」？已記錄在這個帳戶的交易仍會保留，但不再計入任何帳戶餘額。")) return;
@@ -3779,7 +3877,21 @@ function AccountsSection({accounts, transactions, categories, onViewTx, onAddAcc
       {viewingAcc &&
         <AccountDetailSheet acc={viewingAcc} transactions={transactions} categories={categories} accounts={accounts}
           onViewTx={onViewTx}
+          onPayCard={(card, due)=>setPayCard({card, amountDue:due})}
           onClose={()=>setViewingAcc(null)} />
+      }
+      {payCard &&
+        <PayCardModal card={payCard.card} amountDue={payCard.amountDue}
+          accounts={accounts} transactions={transactions}
+          onClose={()=>setPayCard(null)}
+          onSave={async(data)=>{
+            await onPayCard(data);
+            if(data.rememberAccount){
+              onEditAccount(payCard.card.id, { payFromAccountId: data.rememberAccount });
+            }
+            setPayCard(null);
+            setViewingAcc(null);
+          }} />
       }
     </div>
   );
@@ -4749,7 +4861,7 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
   onAddAccount, onEditAccount, onDeleteAccount, onReorderGroup,
   onAddInvestment, onEditInvestment, onDeleteInvestment,
   onAddSubscription, onEditSubscription, onDeleteSubscription,
-  onAddWishlist, onEditWishlist, onDeleteWishlist, onAddTx}){
+  onAddWishlist, onEditWishlist, onDeleteWishlist, onAddTx, onPayCard}){
   const [mode, setMode] = useState("account");
   const [masked, setMasked] = useState(()=>{
     try{ return localStorage.getItem("grove_default_masked")!=="false"; }
@@ -4800,7 +4912,8 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
       </div>
       {mode==="account" &&
         <AccountsSection accounts={accounts} transactions={transactions} categories={categories} onViewTx={onViewTx}
-          onAddAccount={onAddAccount} onEditAccount={onEditAccount} onDeleteAccount={onDeleteAccount} onReorderGroup={onReorderGroup} />
+          onAddAccount={onAddAccount} onEditAccount={onEditAccount} onDeleteAccount={onDeleteAccount} onReorderGroup={onReorderGroup}
+          onPayCard={onPayCard} />
       }
       {mode==="subscription" &&
         <SubscriptionsSection subscriptions={subscriptions||[]} categories={categories} accounts={accounts}
@@ -5073,6 +5186,20 @@ function App(){
       flash("已儲存");
     }catch(e){ alert("儲存失敗："+e.message); }
   }
+  async function payCard(data){
+    try{
+      await addDoc(collection(db,"transactions"), {
+        type:"transfer", amount:data.amount,
+        fromAccountId:data.fromAccountId,
+        toAccountId:data.toAccountId,
+        categoryId:null, accountId:null,
+        date:data.date,
+        note:data.note||"",
+        createdAt:Date.now(),
+      });
+      flash("已記錄繳款");
+    }catch(e){ alert("繳款失敗："+e.message); }
+  }
   async function deleteTx(id){
     if(!confirm("確定刪除這筆交易？")) return;
     await deleteDoc(doc(db,"transactions",id));
@@ -5221,7 +5348,7 @@ function App(){
             onAddInvestment={addInvestment} onEditInvestment={editInvestment} onDeleteInvestment={deleteInvestment}
             onAddSubscription={addSubscription} onEditSubscription={editSubscription} onDeleteSubscription={deleteSubscription}
             wishlists={wishlists} onAddWishlist={addWishlist} onEditWishlist={editWishlist} onDeleteWishlist={deleteWishlist}
-            onAddTx={saveTx} />
+            onAddTx={saveTx} onPayCard={payCard} />
         }
       </div>
 
