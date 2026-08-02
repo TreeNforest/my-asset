@@ -497,6 +497,10 @@
     color:var(--income);font-size:15px;font-weight:700;font-family:inherit;display:flex;
     align-items:center;justify-content:center;gap:7px;margin-bottom:14px;}
   .pay-card-btn i{font-size:19px;}
+  .pay-breakdown{background:var(--field-bg);border-radius:10px;padding:10px 12px;margin:-2px 0 10px;}
+  .pay-breakdown .row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--ink-soft);}
+  .pay-breakdown .row b{color:var(--ink);font-weight:700;}
+  .pay-breakdown .row.total{border-top:1px solid var(--line);margin-top:4px;padding-top:6px;font-size:14px;}
   .acc-detail-balance .nw-value{font-size:26px;font-weight:700;margin-top:4px;}
   .acc-detail-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
   .acc-detail-stats .stat{background:var(--field-bg);border-radius:10px;padding:10px;text-align:center;}
@@ -3637,7 +3641,7 @@ function AccountRow({acc, transactions, dragHandlers, onView, onEdit, onDelete})
 }
 
 /* 信用卡一鍵繳費：從活存帳戶轉帳到信用卡，沖銷欠款 */
-function PayCardModal({card, amountDue, accounts, transactions, onSave, onClose}){
+function PayCardModal({card, amountDue, accounts, transactions, categories, onSave, onClose}){
   /* 可扣款的帳戶：排除信用卡本身與其他負債帳戶 */
   const payFrom = accounts.filter(a=>!isLiability(a.type) && !isExcluded(a));
   const [fromId, setFromId] = useState(()=>{
@@ -3645,23 +3649,36 @@ function PayCardModal({card, amountDue, accounts, transactions, onSave, onClose}
     const preferred = payFrom.find(a=>a.type==="checking") || payFrom[0];
     return preferred ? preferred.id : "";
   });
+  const [reward, setReward] = useState("");          // 現金回饋折抵
   const [amount, setAmount] = useState(String(Math.round(amountDue)));
+  const [amountTouched, setAmountTouched] = useState(false);
   const [date, setDate] = useState(toDateStr(new Date()));
   const [remember, setRemember] = useState(true);
+
+  const due = Math.round(amountDue);
+  const rewardAmt = reward.trim() ? Math.round(safeEval(reward)) : 0;
+  /* 填了回饋而還沒手動改過金額時，自動把應付金額調成「應繳 − 回饋」 */
+  useEffect(()=>{
+    if(amountTouched) return;
+    setAmount(String(Math.max(0, due - (rewardAmt>0?rewardAmt:0))));
+  }, [rewardAmt, due, amountTouched]);
 
   const fromAcc = accounts.find(a=>a.id===fromId);
   const fromBal = fromAcc ? accountBalance(fromAcc, transactions) : 0;
   const amt = Math.round(safeEval(amount));
   const notEnough = fromAcc && amt>fromBal;
-  const partial = amt>0 && amt<Math.round(amountDue);
+  const covered = amt + (rewardAmt>0?rewardAmt:0);   // 這次總共沖掉多少欠款
+  const partial = covered>0 && covered<due;
+  const overPay = covered>due;
 
   function submit(){
-    if(!fromId){ alert("請選擇扣款帳戶"); return; }
-    if(!(amt>0)){ alert("請輸入繳款金額"); return; }
+    if(!(amt>0) && !(rewardAmt>0)){ alert("請輸入繳款金額或回饋金額"); return; }
+    if(amt>0 && !fromId){ alert("請選擇扣款帳戶"); return; }
     onSave({
       fromAccountId: fromId,
       toAccountId: card.id,
       amount: amt,
+      reward: rewardAmt>0 ? rewardAmt : 0,
       date,
       note: card.name+" 繳款",
       rememberAccount: remember ? fromId : null,
@@ -3688,16 +3705,37 @@ function PayCardModal({card, amountDue, accounts, transactions, onSave, onClose}
         </div>
 
         <div className="field">
-          <label>繳款金額</label>
-          <input type="number" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} />
+          <label>現金回饋折抵（選填）</label>
+          <input type="number" inputMode="decimal" value={reward}
+            onChange={e=>{ setReward(e.target.value); setAmountTouched(false); }}
+            placeholder="沒有就留空" />
         </div>
+
+        <div className="field">
+          <label>實際扣款金額</label>
+          <input type="number" inputMode="decimal" value={amount}
+            onChange={e=>{ setAmount(e.target.value); setAmountTouched(true); }} />
+        </div>
+
+        {rewardAmt>0 &&
+          <div className="pay-breakdown">
+            <div className="row"><span>帳單金額</span><b>{fmtMoney(due)}</b></div>
+            <div className="row"><span>回饋折抵</span><b style={{color:"var(--income)"}}>−{fmtMoney(rewardAmt)}</b></div>
+            <div className="row total"><span>實際扣款</span><b>{fmtMoney(amt)}</b></div>
+          </div>
+        }
         {partial &&
-          <div style={{fontSize:12,color:"var(--ink-soft)",marginTop:-6,marginBottom:10}}>
-            部分繳款，剩餘 {fmtMoney(Math.round(amountDue)-amt)} 會留在卡上
+          <div style={{fontSize:12,color:"var(--ink-soft)",marginTop:-2,marginBottom:10}}>
+            部分繳款，剩餘 {fmtMoney(due-covered)} 會留在卡上
+          </div>
+        }
+        {overPay &&
+          <div style={{fontSize:12,color:"var(--ink-soft)",marginTop:-2,marginBottom:10}}>
+            繳款＋回饋超過帳單 {fmtMoney(covered-due)}，卡片餘額會變成溢繳
           </div>
         }
         {notEnough &&
-          <div style={{fontSize:12,color:"var(--warn)",marginTop:-6,marginBottom:10}}>
+          <div style={{fontSize:12,color:"var(--warn)",marginTop:-2,marginBottom:10}}>
             ⚠️ {fromAcc.name} 餘額只有 {fmtMoney(fromBal)}，扣款後會變成負的
           </div>
         }
@@ -3882,7 +3920,7 @@ function AccountsSection({accounts, transactions, categories, onViewTx, onAddAcc
       }
       {payCard &&
         <PayCardModal card={payCard.card} amountDue={payCard.amountDue}
-          accounts={accounts} transactions={transactions}
+          accounts={accounts} transactions={transactions} categories={categories}
           onClose={()=>setPayCard(null)}
           onSave={async(data)=>{
             await onPayCard(data);
@@ -5188,16 +5226,34 @@ function App(){
   }
   async function payCard(data){
     try{
-      await addDoc(collection(db,"transactions"), {
-        type:"transfer", amount:data.amount,
-        fromAccountId:data.fromAccountId,
-        toAccountId:data.toAccountId,
-        categoryId:null, accountId:null,
-        date:data.date,
-        note:data.note||"",
-        createdAt:Date.now(),
-      });
-      flash("已記錄繳款");
+      /* 回饋折抵：記在信用卡上的一筆收入(對負債帳戶而言 = 減少欠款)，
+         不動任何現金帳戶，因為這筆錢你並沒有實際支付 */
+      if(data.reward>0){
+        const rewardCat = categories.find(c=>c.type==="income" && /回饋|獎金/.test(c.name))
+                       || categories.find(c=>c.type==="income" && c.name==="其他收入")
+                       || categories.find(c=>c.type==="income");
+        await addDoc(collection(db,"transactions"), {
+          type:"income", amount:data.reward,
+          accountId:data.toAccountId,
+          categoryId: rewardCat ? rewardCat.id : null,
+          fromAccountId:null, toAccountId:null,
+          date:data.date,
+          note:"現金回饋折抵",
+          createdAt:Date.now(),
+        });
+      }
+      if(data.amount>0){
+        await addDoc(collection(db,"transactions"), {
+          type:"transfer", amount:data.amount,
+          fromAccountId:data.fromAccountId,
+          toAccountId:data.toAccountId,
+          categoryId:null, accountId:null,
+          date:data.date,
+          note:data.note||"",
+          createdAt:Date.now(),
+        });
+      }
+      flash(data.reward>0 ? "已記錄繳款與回饋" : "已記錄繳款");
     }catch(e){ alert("繳款失敗："+e.message); }
   }
   async function deleteTx(id){
