@@ -497,6 +497,23 @@
     color:var(--income);font-size:15px;font-weight:700;font-family:inherit;display:flex;
     align-items:center;justify-content:center;gap:7px;margin-bottom:14px;}
   .pay-card-btn i{font-size:19px;}
+  .alloc-card{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:14px;
+    box-shadow:0 1px 3px rgba(60,50,40,.06);}
+  html.dark .alloc-card{border:1px solid #2C3C28;}
+  .alloc-card .alloc-title{font-size:14px;font-weight:700;margin-bottom:10px;}
+  .alloc-body{display:flex;align-items:center;gap:14px;}
+  .alloc-chart{flex-shrink:0;}
+  .alloc-legend{flex:1;min-width:0;}
+  .alloc-item{display:flex;align-items:center;gap:7px;padding:4px 0;font-size:13px;}
+  .alloc-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .alloc-label{color:var(--ink);flex-shrink:0;}
+  .alloc-pct{color:var(--ink-soft);font-size:12px;margin-left:auto;flex-shrink:0;}
+  .alloc-amt{font-weight:700;font-size:12px;min-width:58px;text-align:right;flex-shrink:0;}
+  @media (max-width:359px){
+    .alloc-body{flex-direction:column;}
+    .alloc-legend{width:100%;}
+  }
+
   .pay-breakdown{background:var(--field-bg);border-radius:10px;padding:10px 12px;margin:-2px 0 10px;}
   .pay-breakdown .row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--ink-soft);}
   .pay-breakdown .row b{color:var(--ink);font-weight:700;}
@@ -4942,10 +4959,12 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
           <span>負債 <b>{maskMoney(liabilities, masked)}</b></span>
         </div>
       </div>
+      <AssetPieChart accounts={accounts} transactions={transactions}
+        investments={investments} masked={masked} />
       <div className="settings-mode-toggle">
         <button className={mode==="account"?"active":""} onClick={()=>setMode("account")}>帳戶</button>
-        <button className={mode==="subscription"?"active":""} onClick={()=>setMode("subscription")}>訂閱</button>
         <button className={mode==="invest"?"active":""} onClick={()=>setMode("invest")}>投資</button>
+        <button className={mode==="subscription"?"active":""} onClick={()=>setMode("subscription")}>訂閱</button>
         <button className={mode==="wish"?"active":""} onClick={()=>setMode("wish")}>願望</button>
       </div>
       {mode==="account" &&
@@ -4972,7 +4991,79 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
   );
 }
 
-/* ---------- App ---------- */
+function fmtPct(frac){
+  const p = frac*100;
+  if(p>0 && p<0.1) return "<0.1%";     // 極小佔比，避免顯示成 0%
+  if(p<10) return p.toFixed(1)+"%";     // 小佔比保留一位小數，1.5% 不會變成 2%
+  return Math.round(p)+"%";
+}
+/* 資產配置圓餅圖（甜甜圈樣式，中央顯示總資產） */
+const ALLOC_COLORS = ["#7A9E6A", "#5E7F87", "#A88C6B", "#9A7B9E", "#C08A6A", "#6E8B7B", "#B0A07A"];
+function AssetPieChart({accounts, transactions, investments, masked}){
+  const slices = useMemo(()=>{
+    const byType = {};
+    accounts.filter(a=>!isLiability(a.type) && !isExcluded(a)).forEach(a=>{
+      const bal = accountBalance(a, transactions);
+      if(bal<=0) return;                       // 負數或零不畫（圓餅圖只呈現正的組成）
+      const label = accTypeInfo(a.type).label;
+      byType[label] = (byType[label]||0) + bal;
+    });
+    const inv = (investments||[]).reduce((s,i)=>s+invMarketValue(i), 0);
+    if(inv>0) byType["投資"] = (byType["投資"]||0) + inv;
+    return Object.keys(byType)
+      .map(label=>({ label, value:byType[label] }))
+      .sort((a,b)=>b.value-a.value);
+  }, [accounts, transactions, investments]);
+
+  const total = slices.reduce((s,x)=>s+x.value, 0);
+  if(!slices.length || total<=0) return null;
+
+  const R = 62, STROKE = 26, C = 2*Math.PI*R, SIZE = 168;
+  let offset = 0;
+  const arcs = slices.map((s,i)=>{
+    const frac = s.value/total;
+    const arc = { ...s, frac, color:ALLOC_COLORS[i%ALLOC_COLORS.length],
+      dash:C*frac, gap:C*(1-frac), rot:offset*360 };
+    offset += frac;
+    return arc;
+  });
+
+  return (
+    <div className="alloc-card">
+      <div className="alloc-title">資產配置</div>
+      <div className="alloc-body">
+        <div className="alloc-chart">
+          <svg width={SIZE} height={SIZE} viewBox={"0 0 "+SIZE+" "+SIZE}>
+            <g transform={"translate("+SIZE/2+","+SIZE/2+")"}>
+              {arcs.map((a,i)=>(
+                <circle key={i} r={R} fill="none" stroke={a.color} strokeWidth={STROKE}
+                  strokeDasharray={a.dash+" "+a.gap}
+                  transform={"rotate("+(a.rot-90)+")"} />
+              ))}
+            </g>
+            <text x={SIZE/2} y={SIZE/2-6} textAnchor="middle"
+              style={{fontSize:11, fill:"var(--ink-soft)", fontFamily:"inherit"}}>總資產</text>
+            <text x={SIZE/2} y={SIZE/2+14} textAnchor="middle"
+              style={{fontSize:15, fontWeight:700, fill:"var(--ink)", fontFamily:"inherit"}}>
+              {masked ? "••••" : fmtMoney(total)}
+            </text>
+          </svg>
+        </div>
+        <div className="alloc-legend">
+          {arcs.map((a,i)=>(
+            <div className="alloc-item" key={i}>
+              <span className="alloc-dot" style={{background:a.color}}></span>
+              <span className="alloc-label">{a.label}</span>
+              <span className="alloc-pct">{fmtPct(a.frac)}</span>
+              <span className="alloc-amt">{masked ? "••••" : fmtMoney(a.value)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App(){
   const [categories, setCategories] = useState([]);
   const [transactions, setTransactions] = useState([]);
