@@ -2101,6 +2101,8 @@ function AddTxModal({categories, accounts, allTransactions, initial, onSave, onD
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [quick, setQuick] = useState("");
   const [quickResult, setQuickResult] = useState(null);   // {applied:[...], missing:[...]}
+  /* 真正的「編輯既有交易」一定帶 id；從首頁按支出/收入進來的 initial 只有 {date,type}，仍算新增 */
+  const isEditing = !!(initial && initial.id);
 
   /* 一句話快速填表：解析後直接套用到各欄位 */
   function applyQuick(){
@@ -2144,8 +2146,8 @@ function AddTxModal({categories, accounts, allTransactions, initial, onSave, onD
     <div className="sheet-overlay" onClick={onClose}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
         <div className="sheet-handle"></div>
-        <h2>{initial?"編輯交易":"新增交易"}</h2>
-        {!initial &&
+        <h2>{isEditing?"編輯交易":"新增交易"}</h2>
+        {!isEditing &&
           <div className="quick-entry">
             <div className="qe-row">
               <input type="text" value={quick}
@@ -2256,7 +2258,7 @@ function AddTxModal({categories, accounts, allTransactions, initial, onSave, onD
           }
         </div>
         <div className="btn-row">
-          {initial && <button className="btn danger" onClick={()=>onDelete(initial.id)}>刪除</button>}
+          {isEditing && <button className="btn danger" onClick={()=>onDelete(initial.id)}>刪除</button>}
           <button className="btn ghost" onClick={onClose}>取消</button>
           <button className="btn primary" onClick={submit}>儲存</button>
         </div>
