@@ -1901,14 +1901,15 @@ function matchAccount(text, accounts, history){
   return best[0];
 }
 
-/* 攤平分類（含子分類），回傳可比對的名稱 */
+/* categories 是扁平陣列（用 parentId 串接），直接用即可；
+   子分類優先，因為「午餐」比「飲食」更精確 */
 function flatCategories(categories){
-  const out = [];
-  (categories||[]).forEach(c=>{
-    out.push(c);
-    (c.children||[]).forEach(ch=>out.push({...ch, parentName:c.name}));
+  const list = (categories||[]).slice();
+  return list.sort((a,b)=>{
+    const aLeaf = a.parentId ? 0 : 1;
+    const bLeaf = b.parentId ? 0 : 1;
+    return aLeaf - bLeaf;
   });
-  return out;
 }
 
 function matchCategoryByName(text, categories){
@@ -1917,7 +1918,8 @@ function matchCategoryByName(text, categories){
     .map(c=>({c, idx:text.indexOf(String(c.name||"")), len:String(c.name||"").length}))
     .filter(h=>h.idx>=0 && h.len>=2);
   if(!hits.length) return null;
-  hits.sort((a,b)=>b.len-a.len);
+  // 名稱越長越精確；同長度時子分類(有 parentId)優先
+  hits.sort((a,b)=> b.len-a.len || ((b.c.parentId?1:0)-(a.c.parentId?1:0)));
   return hits[0];
 }
 
@@ -2115,10 +2117,13 @@ function AddTxModal({categories, accounts, allTransactions, initial, onSave, onD
     else missing.push("金額");
     if(r.type && r.type!==type) setType(r.type);
     if(r.categoryId){
-      setCategoryId(r.categoryId);
-      const flat = flattenForSelect(categories, r.type||type) || [];
-      const c = flat.find(o=>o.id===r.categoryId);
-      applied.push("分類 "+(c?c.name.replace(/^[\s│├└─]+/,""):"已選"));
+      /* 下拉選單只列得出「葉節點」分類，若解析到的是父分類就不套用，改請使用者自選 */
+      const selectable = flattenForSelect(categories, r.type||type) || [];
+      if(selectable.some(o=>o.id===r.categoryId)){
+        setCategoryId(r.categoryId);
+        const c = categories.find(x=>x.id===r.categoryId);
+        applied.push("分類 "+(c && c.name ? c.name : "已選"));
+      }else missing.push("分類");
     }else missing.push("分類");
     if(r.accountId){
       setAccountId(r.accountId);
