@@ -514,6 +514,18 @@
     .alloc-legend{width:100%;}
   }
 
+  .quick-entry{margin-bottom:14px;}
+  .quick-entry .qe-row{display:flex;gap:8px;}
+  .quick-entry input{flex:1;min-width:0;padding:11px 12px;border:1px solid var(--line);
+    border-radius:11px;background:var(--field-bg);color:var(--ink);font-size:15px;font-family:inherit;}
+  .quick-entry input::placeholder{color:var(--ink-soft);opacity:.8;}
+  .quick-entry .qe-row button{flex-shrink:0;width:46px;border:none;border-radius:11px;
+    background:var(--solid);color:#fff;font-size:19px;display:flex;align-items:center;justify-content:center;}
+  .quick-entry .qe-row button:disabled{opacity:.4;}
+  .quick-entry .qe-result{font-size:12px;margin-top:7px;line-height:1.5;}
+  .quick-entry .qe-ok{color:var(--income);}
+  .quick-entry .qe-miss{color:var(--ink-soft);}
+
   .pay-breakdown{background:var(--field-bg);border-radius:10px;padding:10px 12px;margin:-2px 0 10px;}
   .pay-breakdown .row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--ink-soft);}
   .pay-breakdown .row b{color:var(--ink);font-weight:700;}
@@ -1839,6 +1851,226 @@ function CalcInput({value, onChange}){
   );
 }
 
+/* ── 快速記帳：把一句話拆成金額／帳戶／分類／對象／備註 ──
+   完全在本地運算，靠使用者自己的歷史紀錄學習。 */
+
+
+/* 全形數字/符號轉半形，並統一空白 */
+function normalizeText(s){
+  return String(s||"")
+    .replace(/[０-９]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/[Ａ-Ｚａ-ｚ]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/(\d),(?=\d{3}(?!\d))/g, "$1")   // 1,200 → 1200
+    .replace(/[，、]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/* 帳戶的可能叫法：全名、去掉括號/尾數後、以及各種長度的前綴 */
+function accountAliases(acc){
+  const name = String(acc.name||"").trim();
+  const out = new Set([name]);
+  const noParen = name.replace(/[（(].*$/, "").trim();
+  if(noParen) out.add(noParen);
+  // 去掉尾端數字（例如「玉山銀行260803」→「玉山銀行」）
+  const noDigit = noParen.replace(/[0-9]+$/, "").trim();
+  if(noDigit) out.add(noDigit);
+  // 漸進式前綴：國泰／國泰世／國泰世華…讓最長的那個優先被認出來
+  for(let n=2; n<=noDigit.length; n++) out.add(noDigit.slice(0,n));
+  return Array.from(out).filter(x=>x.length>=2);
+}
+
+/* 在文字中找出最長、最明確的帳戶 */
+function matchAccount(text, accounts, history){
+  const hits = [];
+  accounts.forEach(acc=>{
+    accountAliases(acc).forEach(alias=>{
+      const idx = text.indexOf(alias);
+      if(idx>=0) hits.push({acc, alias, len:alias.length, idx});
+    });
+  });
+  if(!hits.length) return null;
+  const maxLen = Math.max(...hits.map(h=>h.len));
+  let best = hits.filter(h=>h.len===maxLen);
+  if(best.length>1){
+    // 同樣長度時，用歷史使用次數決定（常用的優先）
+    const useCount = {};
+    (history||[]).forEach(t=>{ if(t.accountId) useCount[t.accountId]=(useCount[t.accountId]||0)+1; });
+    best.sort((a,b)=>(useCount[b.acc.id]||0)-(useCount[a.acc.id]||0));
+  }
+  return best[0];
+}
+
+/* 攤平分類（含子分類），回傳可比對的名稱 */
+function flatCategories(categories){
+  const out = [];
+  (categories||[]).forEach(c=>{
+    out.push(c);
+    (c.children||[]).forEach(ch=>out.push({...ch, parentName:c.name}));
+  });
+  return out;
+}
+
+function matchCategoryByName(text, categories){
+  const flat = flatCategories(categories);
+  const hits = flat
+    .map(c=>({c, idx:text.indexOf(String(c.name||"")), len:String(c.name||"").length}))
+    .filter(h=>h.idx>=0 && h.len>=2);
+  if(!hits.length) return null;
+  hits.sort((a,b)=>b.len-a.len);
+  return hits[0];
+}
+
+/* 從歷史紀錄找出「對象」(counterpart)，例如 全家、50嵐、康是美 */
+function matchCounterpart(text, history){
+  const seen = new Map();
+  (history||[]).forEach(t=>{
+    const cp = (t.counterpart||"").trim();
+    if(cp.length>=2) seen.set(cp, (seen.get(cp)||0)+1);
+  });
+  const hits = [];
+  seen.forEach((count, cp)=>{
+    if(text.indexOf(cp)>=0) hits.push({cp, count, len:cp.length});
+  });
+  if(!hits.length) return null;
+  hits.sort((a,b)=> b.len-a.len || b.count-a.count);
+  return hits[0];
+}
+
+/* 用歷史投票決定分類／帳戶：越近期權重越高 */
+function voteFromHistory(matchedTx, field){
+  if(!matchedTx.length) return null;
+  const score = {};
+  const now = Date.now();
+  matchedTx.forEach(t=>{
+    const id = t[field];
+    if(!id) return;
+    const ageDays = t.createdAt ? (now-t.createdAt)/86400000 : 180;
+    const w = 1 / (1 + ageDays/90);      // 90天前的權重減半
+    score[id] = (score[id]||0) + w;
+  });
+  const keys = Object.keys(score);
+  if(!keys.length) return null;
+  keys.sort((a,b)=>score[b]-score[a]);
+  return { id:keys[0], confidence: score[keys[0]] / keys.reduce((s,k)=>s+score[k],0) };
+}
+
+/* 日期：今天／昨天／前天／8/5／8月5日 */
+function matchDate(text, today){
+  const base = today ? fromDateStr(today) : new Date();
+  let m;
+  if(/前天/.test(text)){ const d=new Date(base); d.setDate(d.getDate()-2); return {date:toDateStr(d), matched:"前天"}; }
+  m = text.match(/昨天|昨日/);
+  if(m){ const d=new Date(base); d.setDate(d.getDate()-1); return {date:toDateStr(d), matched:m[0]}; }
+  m = text.match(/今天|今日/);
+  if(m){ return {date:toDateStr(base), matched:m[0]}; }
+  m = text.match(/(\d{1,2})月(\d{1,2})[日號]?/);
+  if(m){ const d=new Date(base.getFullYear(), +m[1]-1, +m[2]); return {date:toDateStr(d), matched:m[0]}; }
+  m = text.match(/(?:^|\s)(\d{1,2})\/(\d{1,2})(?:\s|$)/);
+  if(m){ const d=new Date(base.getFullYear(), +m[1]-1, +m[2]); return {date:toDateStr(d), matched:m[0].trim()}; }
+  return null;
+}
+
+/* 金額：支援 85元 / $85 / 85塊 / 1,200
+   只回傳「數字本身(＋單位)」，不含前面那個字，避免把中文字一起吃掉 */
+function matchAmount(text){
+  const patterns = [
+    /(\d+(?:\.\d+)?)\s*(?:元|塊|圓)/,
+    /[$＄]\s*(\d+(?:\.\d+)?)/,
+    /(\d+(?:\.\d+)?)/,
+  ];
+  for(const re of patterns){
+    const m = re.exec(text);
+    if(m){
+      const v = parseFloat(m[1]);
+      if(v>0) return { amount:v, matched:m[0] };
+    }
+  }
+  return null;
+}
+
+function detectType(text, categoryObj){
+  if(categoryObj && categoryObj.type) return categoryObj.type;
+  if(/收入|薪水|薪資|入帳|退款|退費|回饋|獎金|紅包|中獎/.test(text)) return "income";
+  return "expense";
+}
+
+/* ── 主函式 ── */
+function parseQuickEntry(rawText, ctx){
+  const { categories=[], accounts=[], transactions=[], today=null } = ctx||{};
+  const text = normalizeText(rawText);
+  if(!text) return null;
+
+  let work = text;                    // 逐步移除已識別的片段，剩下的當備註
+  const used = [];
+  function consume(str){
+    if(!str) return;
+    const i = work.indexOf(str);
+    if(i>=0){ work = work.slice(0,i) + " " + work.slice(i+str.length); used.push(str); }
+  }
+
+  // 1. 日期
+  const dateHit = matchDate(work, today);
+  if(dateHit) consume(dateHit.matched);
+
+  // 2. 帳戶（先移除，避免帳戶名稱裡的數字被誤認成金額）
+  const accHit = matchAccount(work, accounts, transactions);
+  if(accHit) consume(accHit.alias);
+
+  // 3. 分類（直接寫出分類名稱時，優先度最高）
+  const catHit = matchCategoryByName(work, categories);
+  if(catHit) consume(catHit.c.name);
+
+  // 4. 對象（從歷史學到的店家）
+  const cpHit = matchCounterpart(work, transactions);
+  if(cpHit) consume(cpHit.cp);
+
+  // 5. 金額
+  const amtHit = matchAmount(work);
+  if(amtHit) consume(amtHit.matched);
+
+  // 6. 用歷史投票補上沒指定的欄位
+  let catFromHistory = null, accFromHistory = null;
+  if(cpHit){
+    const same = transactions.filter(t=>(t.counterpart||"").trim()===cpHit.cp);
+    if(!catHit) catFromHistory = voteFromHistory(same, "categoryId");
+    if(!accHit) accFromHistory = voteFromHistory(same, "accountId");
+  }
+  // 對象比對不到時，用備註關鍵字找相似的歷史紀錄
+  if(!catHit && !catFromHistory){
+    const kw = work.trim();
+    if(kw.length>=2){
+      const similar = transactions.filter(t=>{
+        const n=(t.note||"")+" "+(t.counterpart||"");
+        return n && (n.indexOf(kw)>=0 || kw.indexOf(n.trim())>=0);
+      });
+      if(similar.length) catFromHistory = voteFromHistory(similar, "categoryId");
+    }
+  }
+
+  const flat = flatCategories(categories);
+  const categoryId = catHit ? catHit.c.id : (catFromHistory ? catFromHistory.id : null);
+  const categoryObj = flat.find(c=>c.id===categoryId) || null;
+  const accountId = accHit ? accHit.acc.id : (accFromHistory ? accFromHistory.id : null);
+
+  const note = work.replace(/\s+/g," ").trim();
+
+  return {
+    amount: amtHit ? amtHit.amount : null,
+    accountId,
+    categoryId,
+    counterpart: cpHit ? cpHit.cp : "",
+    note,
+    date: dateHit ? dateHit.date : null,
+    type: detectType(text, categoryObj),
+    confidence: {
+      amount: !!amtHit,
+      account: accHit ? "exact" : (accFromHistory ? "history" : null),
+      category: catHit ? "exact" : (catFromHistory ? "history" : null),
+    },
+  };
+}
+
 function AddTxModal({categories, accounts, allTransactions, initial, onSave, onDelete, onClose}){
   const [type, setType] = useState((initial&&initial.type)||"expense");
   const [amount, setAmount] = useState(initial?String(initial.amount):"");
@@ -1867,6 +2099,35 @@ function AddTxModal({categories, accounts, allTransactions, initial, onSave, onD
   const counterpartLabel = type==="expense" ? "付給（對象）" : "收自（對象）";
   const counterpartPlaceholder = type==="expense" ? "例如：全家、Sukiya" : "例如：公司、朋友名字";
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [quick, setQuick] = useState("");
+  const [quickResult, setQuickResult] = useState(null);   // {applied:[...], missing:[...]}
+
+  /* 一句話快速填表：解析後直接套用到各欄位 */
+  function applyQuick(){
+    const text = quick.trim();
+    if(!text) return;
+    const r = parseQuickEntry(text, {categories, accounts, transactions:allTransactions, today:date});
+    if(!r){ return; }
+    const applied = [], missing = [];
+    if(r.amount!=null){ setAmount(String(r.amount)); applied.push("金額 "+r.amount); }
+    else missing.push("金額");
+    if(r.type && r.type!==type) setType(r.type);
+    if(r.categoryId){
+      setCategoryId(r.categoryId);
+      const flat = flattenForSelect(categories, r.type||type) || [];
+      const c = flat.find(o=>o.id===r.categoryId);
+      applied.push("分類 "+(c?c.name.replace(/^[\s│├└─]+/,""):"已選"));
+    }else missing.push("分類");
+    if(r.accountId){
+      setAccountId(r.accountId);
+      const a = accounts.find(x=>x.id===r.accountId);
+      applied.push("帳戶 "+(a?a.name:""));
+    }else missing.push("帳戶");
+    if(r.counterpart){ setCounterpart(r.counterpart); applied.push("對象 "+r.counterpart); }
+    if(r.note) setNote(r.note);
+    if(r.date) setDate(r.date);
+    setQuickResult({applied, missing});
+  }
 
   const allCounterparts = useMemo(()=>{
     const pool = allTransactions || [];
@@ -1884,6 +2145,30 @@ function AddTxModal({categories, accounts, allTransactions, initial, onSave, onD
       <div className="sheet" onClick={e=>e.stopPropagation()}>
         <div className="sheet-handle"></div>
         <h2>{initial?"編輯交易":"新增交易"}</h2>
+        {!initial &&
+          <div className="quick-entry">
+            <div className="qe-row">
+              <input type="text" value={quick}
+                onChange={e=>{ setQuick(e.target.value); setQuickResult(null); }}
+                onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); applyQuick(); } }}
+                placeholder="一句話記帳，例如：全家 咖啡 45" />
+              <button onClick={applyQuick} disabled={!quick.trim()}>
+                <i className="ph ph-magic-wand"></i>
+              </button>
+            </div>
+            {quickResult &&
+              <div className="qe-result">
+                {quickResult.applied.length>0 &&
+                  <span className="qe-ok">已填入 {quickResult.applied.join("・")}</span>}
+                {quickResult.missing.length>0 &&
+                  <span className="qe-miss">
+                    {quickResult.applied.length>0 && "　"}
+                    {quickResult.missing.join("、")} 請手動選
+                  </span>}
+              </div>
+            }
+          </div>
+        }
         <div className="type-toggle">
           <button className={type==="expense"?"active expense":""} onClick={()=>setType("expense")}>{isCredit?"刷卡":"支出"}</button>
           <button className={type==="income"?"active income":""} onClick={()=>setType("income")}>{isCredit?"還款":"收入"}</button>
