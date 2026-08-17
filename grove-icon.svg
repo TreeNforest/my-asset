@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="林間帳本 Grove">
+  <title>林間帳本 Grove</title>
+
+  <!-- 底色：森林深綠，取自 app 的 --solid -->
+  <rect width="512" height="512" rx="112" fill="#3A4F32"/>
+
+  <!-- 樹冠 = 資產配置圓餅圖，三塊對應定存／活存／投資 -->
+  <!-- 角度安排讓正下方(樹幹位置)整段落在中綠上，米白樹幹才不會與米白扇形黏在一起 -->
+  <path d="M 256 210 L 162.47 156 A 108 108 0 1 1 325.42 292.73 Z" fill="#F1F3EC"/>
+  <path d="M 256 210 L 325.42 292.73 A 108 108 0 0 1 162.47 264 Z" fill="#6F9159"/>
+  <path d="M 256 210 L 162.47 264 A 108 108 0 0 1 162.47 156 Z" fill="#A8C293"/>
+
+  <!-- 樹幹：加粗，縮到 48px 才不會斷 -->
+  <rect x="239" y="300" width="34" height="86" fill="#F1F3EC"/>
+  <!-- 地面 -->
+  <rect x="191" y="384" width="130" height="24" rx="12" fill="#F1F3EC"/>
+</svg>
