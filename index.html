@@ -101,6 +101,33 @@
     background-size:160px 160px;
   }
   button{font-family:inherit;}
+
+  /* ── 開場畫面 ── */
+  #splash{
+    position:fixed; inset:0; z-index:9999;
+    background:#314931;              /* 與插畫本身的底色相同，圖片邊緣才看不出接縫 */
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:0; padding:24px;
+    transition:opacity .45s ease;
+  }
+  #splash img{
+    width:min(52vw, 210px);
+    height:auto; display:block;
+    border-radius:3px;
+    box-shadow:0 10px 30px rgba(0,0,0,.28);
+  }
+  #splash .splash-name{
+    margin-top:26px; font-size:21px; letter-spacing:.14em;
+    color:#F1F3EC; font-weight:600;
+  }
+  #splash .splash-sub{
+    margin-top:6px; font-size:11px; letter-spacing:.42em;
+    color:#A8C293; text-indent:.42em;   /* 補掉字距造成的視覺偏移 */
+  }
+  #splash.is-hiding{ opacity:0; pointer-events:none; }
+  @media (prefers-reduced-motion:reduce){
+    #splash{transition:none;}
+  }
   #root{min-height:100vh;padding-bottom:90px;}
 
   .header{position:sticky;top:0;z-index:10;background:var(--bg);padding:18px 18px 8px;
@@ -693,6 +720,12 @@
 <link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@300;400;700&family=Noto+Serif+TC:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
+<!-- 開場畫面：寫在 body 裡，開啟就立刻看到，不必等 React 載入 -->
+<div id="splash">
+  <img src="./splash-book.jpg" alt="" />
+  <div class="splash-name">林間帳本</div>
+  <div class="splash-sub">GROVE</div>
+</div>
 <div id="root"></div>
 
 <script type="importmap">
@@ -5440,6 +5473,7 @@ function App(){
   useEffect(()=>{
     const unsub = onSnapshot(query(collection(db,"transactions"), orderBy("date","desc")), snap=>{
       setTransactions(snap.docs.map(d=>({id:d.id, ...d.data()})));
+      if(window.__groveReady) window.__groveReady();   // 資料到齊，收掉開場畫面
     });
     return unsub;
   }, []);
@@ -5953,6 +5987,26 @@ function App(){
     </div>
   );
 }
+
+/* 關閉開場畫面。至少停留 900ms(避免一閃而過)，
+   最多 3.5 秒就一定關掉——就算 Firebase 連不上也不會卡住。 */
+(function(){
+  const el = document.getElementById("splash");
+  if(!el) return;
+  const start = Date.now();
+  let done = false;
+  function hide(){
+    if(done) return;
+    done = true;
+    const wait = Math.max(0, 900-(Date.now()-start));
+    setTimeout(()=>{
+      el.classList.add("is-hiding");
+      setTimeout(()=>{ el.remove(); }, 500);
+    }, wait);
+  }
+  window.__groveReady = hide;          // 資料載入完成時由 App 呼叫
+  setTimeout(hide, 3500);              // 保險：無論如何都會關
+})();
 
 createRoot(document.getElementById("root")).render(<App />);
 </script>
