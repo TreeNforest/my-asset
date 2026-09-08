@@ -541,6 +541,33 @@
     .alloc-legend{width:100%;}
   }
 
+  .streak-card{background:var(--surface);border-radius:var(--radius);padding:15px 16px 13px;margin-bottom:14px;
+    box-shadow:0 1px 3px rgba(60,50,40,.06);}
+  html.dark .streak-card{border:1px solid #2C3C28;}
+  .streak-card .sk-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px;}
+  .streak-card .sk-num{font-size:14px;color:var(--ink-soft);}
+  .streak-card .sk-num b{font-size:27px;color:var(--ink);font-weight:700;margin-right:2px;}
+  .streak-card .sk-badge{display:inline-block;margin-left:7px;font-size:10px;font-weight:600;
+    padding:2px 7px;border-radius:20px;background:var(--income-soft);color:var(--income);vertical-align:middle;}
+  .streak-card .sk-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .streak-card .sk-btn{flex-shrink:0;border:1px solid var(--line);background:var(--field-bg);color:var(--ink);
+    border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;font-family:inherit;}
+  .streak-card .sk-done{flex-shrink:0;font-size:13px;color:var(--income);display:flex;align-items:center;gap:5px;
+    padding-top:6px;}
+  .streak-card .sk-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .streak-card .sk-wk{font-size:10px;color:var(--ink-soft);text-align:center;padding-bottom:2px;}
+  .streak-card .sk-cell{aspect-ratio:1;border-radius:4px;background:var(--field-bg);cursor:pointer;}
+  html.dark .streak-card .sk-cell{background:#243020;}
+  .streak-card .sk-cell.done{background:var(--accent);cursor:default;}
+  .streak-card .sk-cell.nospend{background:var(--accent);opacity:.42;}
+  .streak-card .sk-cell.future{background:transparent;cursor:default;}
+  .streak-card .sk-cell.today{box-shadow:0 0 0 2px var(--ink-soft);}
+  .streak-card .sk-legend{display:flex;align-items:center;gap:12px;margin-top:10px;font-size:11px;color:var(--ink-soft);}
+  .streak-card .sk-dot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;vertical-align:middle;}
+  .streak-card .sk-dot.done{background:var(--accent);}
+  .streak-card .sk-dot.nospend{background:var(--accent);opacity:.42;}
+  .streak-card .sk-tip{margin-left:auto;opacity:.75;}
+
   .quick-entry{margin-bottom:14px;}
   .quick-entry .qe-row{display:flex;gap:8px;}
   .quick-entry input{flex:1;min-width:0;padding:11px 12px;border:1px solid var(--line);
@@ -1879,6 +1906,109 @@ function CalcInput({value, onChange}){
         <button type="button" className="calc-key eq" onClick={()=>press("=")}>＝</button>
         <button type="button" className="calc-key wide" onClick={()=>press("0")}>0</button>
         <button type="button" className="calc-key wide" onClick={()=>press(".")}>.</button>
+      </div>
+    </div>
+  );
+}
+
+/* ── 記帳習慣：連續天數 ──
+   「有記帳」的定義：當天有至少一筆「你自己記的」交易，或按了「今天沒花錢」。
+   訂閱自動扣款、定存自動利息不算——那些不是你動手記的，
+   算進去的話連續天數會自己長，就失去意義了。 */
+function isManualTx(t){
+  return !t.autoSubscription && !t.autoInterest;
+}
+function buildRecordedDays(transactions, checkins){
+  const set = new Set();
+  (transactions||[]).forEach(t=>{ if(t.date && isManualTx(t)) set.add(t.date); });
+  const noSpend = new Set();
+  (checkins||[]).forEach(c=>{ if(c.date){ set.add(c.date); noSpend.add(c.date); } });
+  return { set, noSpend };
+}
+/* 今天還沒記不算斷（還有一整天可以補），所以從今天或昨天起算 */
+function currentStreak(set, todayStr){
+  const cur = fromDateStr(todayStr);
+  if(!set.has(todayStr)) cur.setDate(cur.getDate()-1);
+  let n = 0;
+  while(set.has(toDateStr(cur))){ n++; cur.setDate(cur.getDate()-1); }
+  return n;
+}
+function longestStreak(set){
+  if(!set.size) return 0;
+  const days = Array.from(set).sort();
+  let best = 1, run = 1;
+  for(let i=1;i<days.length;i++){
+    const prev = fromDateStr(days[i-1]);
+    prev.setDate(prev.getDate()+1);
+    if(toDateStr(prev)===days[i]){ run++; best = Math.max(best, run); }
+    else run = 1;
+  }
+  return best;
+}
+
+const WEEK_LABELS = ["日","一","二","三","四","五","六"];
+function StreakCard({transactions, checkins, onToggleNoSpend}){
+  const todayStr = toDateStr(new Date());
+  const { set, noSpend } = useMemo(()=>buildRecordedDays(transactions, checkins), [transactions, checkins]);
+  const streak = currentStreak(set, todayStr);
+  const best = longestStreak(set);
+  const todayDone = set.has(todayStr);
+
+  /* 最近 5 週，對齊星期欄位；今天之後的格子留白 */
+  const cells = useMemo(()=>{
+    const end = fromDateStr(todayStr);
+    end.setDate(end.getDate() + (6 - end.getDay()));   // 補到本週六
+    const out = [];
+    for(let i=34;i>=0;i--){
+      const d = new Date(end);
+      d.setDate(d.getDate()-i);
+      out.push(toDateStr(d));
+    }
+    return out;
+  }, [todayStr]);
+
+  return (
+    <div className="streak-card">
+      <div className="sk-head">
+        <div>
+          <div className="sk-num">
+            <b>{streak}</b> 天
+            {streak>0 && streak>=best && best>1 && <span className="sk-badge">新紀錄</span>}
+          </div>
+          <div className="sk-sub">連續記帳・最長 {best} 天</div>
+        </div>
+        {!todayDone &&
+          <button className="sk-btn" onClick={()=>onToggleNoSpend(todayStr)}>
+            今天沒花錢
+          </button>
+        }
+        {todayDone &&
+          <div className="sk-done">
+            <i className="ph ph-check-circle"></i>今天已記
+          </div>
+        }
+      </div>
+
+      <div className="sk-grid">
+        {WEEK_LABELS.map(w=><div className="sk-wk" key={w}>{w}</div>)}
+        {cells.map(d=>{
+          const future = d>todayStr;
+          const has = set.has(d);
+          const isNo = noSpend.has(d);
+          const cls = "sk-cell" + (future?" future":"") + (has?(isNo?" nospend":" done"):"")
+                    + (d===todayStr?" today":"");
+          const title = future ? "" : d + (has ? (isNo?"：沒花錢":"：有記帳") : "：沒有紀錄");
+          return (
+            <div key={d} className={cls} title={title}
+              onClick={()=>{ if(!future && (!has || isNo)) onToggleNoSpend(d); }}>
+            </div>
+          );
+        })}
+      </div>
+      <div className="sk-legend">
+        <span><i className="sk-dot done"></i>有記帳</span>
+        <span><i className="sk-dot nospend"></i>沒花錢</span>
+        <span className="sk-tip">點空格可補登沒花錢的日子</span>
       </div>
     </div>
   );
@@ -3376,7 +3506,7 @@ function SpendingAnalysisCard({categories, accounts, monthTx, allTx, periodLabel
   );
 }
 
-function OverviewTab({categories, accounts, monthTx, allTx, periodLabel, onViewTx, onAdd}){
+function OverviewTab({categories, accounts, monthTx, allTx, periodLabel, checkins, onToggleNoSpend, onViewTx, onAdd}){
   const label = periodLabel || "本月";
   const [query, setQuery] = useState("");
   const isSearching = query.trim().length > 0;
@@ -3436,6 +3566,7 @@ function OverviewTab({categories, accounts, monthTx, allTx, periodLabel, onViewT
         </React.Fragment>
         :
         <React.Fragment>
+          <StreakCard transactions={allTx} checkins={checkins} onToggleNoSpend={onToggleNoSpend} />
           <SpendingAnalysisCard categories={categories} accounts={accounts} monthTx={monthTx} allTx={allTx} periodLabel={label} />
           <div className="section-title">{label}交易</div>
           {dayGroups.length===0 && <div className="empty-hint">這段時間還沒有任何紀錄，點右下角「＋」新增一筆吧</div>}
@@ -5423,6 +5554,7 @@ function App(){
   const [categories, setCategories] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [budgets, setBudgets] = useState([]);
+  const [checkins, setCheckins] = useState([]);   // 「今天沒花錢」的打卡紀錄
   const [accounts, setAccounts] = useState([]);
   const [investments, setInvestments] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
@@ -5474,6 +5606,13 @@ function App(){
     const unsub = onSnapshot(query(collection(db,"transactions"), orderBy("date","desc")), snap=>{
       setTransactions(snap.docs.map(d=>({id:d.id, ...d.data()})));
       if(window.__groveReady) window.__groveReady();   // 資料到齊，收掉開場畫面
+    });
+    return unsub;
+  }, []);
+
+  useEffect(()=>{
+    const unsub = onSnapshot(collection(db,"checkins"), snap=>{
+      setCheckins(snap.docs.map(d=>({id:d.id, ...d.data()})));
     });
     return unsub;
   }, []);
@@ -5663,6 +5802,23 @@ function App(){
   function closeAddModals(){
     setShowAdd(false); setEditingTx(null); setPresetDate(null); setPresetType(null); setAddKind("txn");
   }
+  /* 「今天沒花錢」打卡：再按一次就取消。
+     那天若已經有真的記帳，就不需要打卡，直接忽略。 */
+  async function toggleNoSpend(dateStr){
+    try{
+      const existing = checkins.find(c=>c.date===dateStr);
+      if(existing){
+        await deleteDoc(doc(db,"checkins",existing.id));
+        flash("已取消");
+        return;
+      }
+      const hasReal = transactions.some(t=>t.date===dateStr && isManualTx(t));
+      if(hasReal){ flash("這天已經有記帳了"); return; }
+      await addDoc(collection(db,"checkins"), { date:dateStr, createdAt:Date.now() });
+      flash(dateStr===toDateStr(new Date()) ? "今天沒花錢，讚" : "已補登");
+    }catch(e){ alert("儲存失敗："+e.message); }
+  }
+
   async function saveTx(data){
     try{
       if(editingTx) await updateDoc(doc(db,"transactions",editingTx.id), data);
@@ -5874,6 +6030,7 @@ function App(){
             {homeMode==="list" ?
               <OverviewTab categories={categories} accounts={accounts} monthTx={rangeTx} allTx={transactions}
                 periodLabel={homeRangeMode==="custom"?"區間":"本月"}
+                checkins={checkins} onToggleNoSpend={toggleNoSpend}
                 onViewTx={openViewTx} />
               :
               <CalendarTab categories={categories} accounts={accounts} monthTx={monthTx} cursorMonth={cursorMonth}
