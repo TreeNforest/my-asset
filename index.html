@@ -193,6 +193,8 @@
   .tx-item .mid .cat{font-size:16px;font-weight:600;}
   .tx-item .mid .note{font-size:14px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .tx-item .amt{font-size:17px;font-weight:700;flex-shrink:0;}
+  .tx-item .amt-wrap{flex-shrink:0;text-align:right;}
+  .tx-item .tx-bal{font-size:11px;color:var(--ink-soft);margin-top:2px;white-space:nowrap;}
   .tx-item .amt.income{color:var(--income);}
   .tx-item .amt.expense{color:var(--expense);}
   .tx-item .amt.transfer{color:var(--ink-soft);}
@@ -982,32 +984,33 @@ function dueInterestDates(acc, today){
   return dates;
 }
 
+/* 單筆交易讓這個帳戶的餘額變動多少（信用卡是負債，方向相反） */
+function txDelta(acc, t){
+  if(t.type==="transfer"){
+    const leaving = t.fromAccountId===acc.id;
+    const arriving = t.toAccountId===acc.id;
+    if(!leaving && !arriving) return 0;
+    if(isLiability(acc.type)) return leaving ? t.amount : -t.amount;
+    return leaving ? -t.amount : t.amount;
+  }
+  if(t.accountId !== acc.id) return 0;
+  if(isLiability(acc.type)) return t.type==="expense" ? t.amount : -t.amount;
+  return t.type==="income" ? t.amount : -t.amount;
+}
 function accountBalance(acc, transactions){
   let bal = acc.initialBalance || 0;
-  transactions.forEach(t=>{
-    if(t.type==="transfer"){
-      const leaving = t.fromAccountId===acc.id;
-      const arriving = t.toAccountId===acc.id;
-      if(!leaving && !arriving) return;
-      if(isLiability(acc.type)){
-        if(leaving) bal += t.amount;
-        if(arriving) bal -= t.amount;
-      }else{
-        if(leaving) bal -= t.amount;
-        if(arriving) bal += t.amount;
-      }
-      return;
-    }
-    if(t.accountId !== acc.id) return;
-    if(isLiability(acc.type)){
-      if(t.type==="expense") bal += t.amount;
-      else bal -= t.amount;
-    }else{
-      if(t.type==="income") bal += t.amount;
-      else bal -= t.amount;
-    }
-  });
+  transactions.forEach(t=>{ bal += txDelta(acc, t); });
   return bal;
+}
+/* 每筆交易「當下的結餘」：依時間順序累加，回傳 {交易id: 該筆之後的餘額} */
+function runningBalances(acc, acctTx){
+  const chrono = acctTx.slice().sort((a,b)=>
+    (a.date||"").localeCompare(b.date||"") || (a.createdAt||0)-(b.createdAt||0)
+  );
+  const map = {};
+  let bal = acc.initialBalance || 0;
+  chrono.forEach(t=>{ bal += txDelta(acc, t); map[t.id] = bal; });
+  return map;
 }
 
 /* 國泰單筆手續費（可在每筆買進調整） */
@@ -1704,7 +1707,9 @@ function BottomNav({tab, setTab}){
   );
 }
 
-function TxRow({t, categories, accounts, onClick}){
+function TxRow({t, categories, accounts, onClick, balanceAfter, balanceLabel}){
+  const balNode = balanceAfter==null ? null :
+    <div className="tx-bal">{balanceLabel||"餘"} {fmtMoney(balanceAfter)}</div>;
   if(t.type==="transfer"){
     const fromAcc = catById(accounts, t.fromAccountId);
     const toAcc = catById(accounts, t.toAccountId);
@@ -1716,7 +1721,10 @@ function TxRow({t, categories, accounts, onClick}){
           <div className="cat">轉帳</div>
           <div className="note">{subLabel}</div>
         </div>
-        <div className="amt transfer">{fmtMoney(t.amount)}</div>
+        <div className="amt-wrap">
+          <div className="amt transfer">{fmtMoney(t.amount)}</div>
+          {balNode}
+        </div>
       </div>
     );
   }
@@ -1730,7 +1738,10 @@ function TxRow({t, categories, accounts, onClick}){
         <div className="cat">{cat?cat.name:"未分類"}</div>
         {subLabel && <div className="note">{subLabel}</div>}
       </div>
-      <div className={"amt "+t.type}>{t.type==="income"?"+":"−"}{fmtMoney(t.amount)}</div>
+      <div className="amt-wrap">
+        <div className={"amt "+t.type}>{t.type==="income"?"+":"−"}{fmtMoney(t.amount)}</div>
+        {balNode}
+      </div>
     </div>
   );
 }
@@ -4300,6 +4311,11 @@ function AccountDetailSheet({acc, transactions, categories, accounts, onViewTx, 
     [...catEntries.slice(0,6), {id:"_rest", value:catEntries.slice(6).reduce((s,e)=>s+e.value,0), name:"其他", color:"#B8AFA2"}]
     : catEntries;
 
+  /* 逐筆結餘要用「全部」交易依時間累加，不能只算篩選後的，
+     不然切到某一年時數字會不對 */
+  const balMap = useMemo(()=>runningBalances(acc, acctTx), [acc, acctTx]);
+  const balLabel = isLiability(acc.type) ? "欠" : "餘";
+
   const dayGroups = groupByDate(filteredTx);
 
   return (
@@ -4365,7 +4381,9 @@ function AccountDetailSheet({acc, transactions, categories, accounts, onViewTx, 
           <React.Fragment key={g.date}>
             <div className="day-group-header">{formatDayLabel(g.date)}</div>
             {g.items.map(t=>
-              <TxRow key={t.id} t={t} categories={categories} accounts={accounts} onClick={()=>onViewTx(t)} />
+              <TxRow key={t.id} t={t} categories={categories} accounts={accounts}
+                balanceAfter={balMap[t.id]} balanceLabel={balLabel}
+                onClick={()=>onViewTx(t)} />
             )}
           </React.Fragment>
         )}
