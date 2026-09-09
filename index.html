@@ -602,7 +602,7 @@
   .nw-table .chg-pos{color:var(--income);}
   .nw-table .chg-neg{color:var(--expense);}
   .nw-table .chg-zero{color:var(--ink-soft);}
-  .acc-detail-year-row{display:flex;justify-content:flex-end;margin-bottom:10px;}
+  .acc-detail-year-row{display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;}
   .acc-detail-year-row select{border:1px solid var(--line);border-radius:8px;padding:6px 8px;
     font-size:13px;background:var(--field-bg);color:var(--ink);}
   .img-lib{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
@@ -4276,6 +4276,7 @@ function PayCardModal({card, amountDue, accounts, transactions, categories, onSa
 
 function AccountDetailSheet({acc, transactions, categories, accounts, onViewTx, onPayCard, onClose}){
   const [yearFilter, setYearFilter] = useState("all");
+  const [monthFilter, setMonthFilter] = useState("all");
 
   const acctTx = useMemo(()=>{
     return transactions.filter(t=>
@@ -4288,10 +4289,23 @@ function AccountDetailSheet({acc, transactions, categories, accounts, onViewTx, 
     return Array.from(set).sort((a,b)=>b.localeCompare(a));
   }, [acctTx]);
 
+  /* 只列出該年真的有交易的月份，避免選到空月份 */
+  const monthsOfYear = useMemo(()=>{
+    if(yearFilter==="all") return [];
+    const set = new Set(
+      acctTx.filter(t=>t.date.slice(0,4)===yearFilter).map(t=>t.date.slice(5,7))
+    );
+    return Array.from(set).sort((a,b)=>b.localeCompare(a));
+  }, [acctTx, yearFilter]);
+
   const filteredTx = useMemo(()=>{
     if(yearFilter==="all") return acctTx;
-    return acctTx.filter(t=>t.date.slice(0,4)===yearFilter);
-  }, [acctTx, yearFilter]);
+    return acctTx.filter(t=>{
+      if(t.date.slice(0,4)!==yearFilter) return false;
+      if(monthFilter!=="all" && t.date.slice(5,7)!==monthFilter) return false;
+      return true;
+    });
+  }, [acctTx, yearFilter, monthFilter]);
 
   const totalIncome = filteredTx.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
   const totalExpense = filteredTx.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
@@ -4350,10 +4364,17 @@ function AccountDetailSheet({acc, transactions, categories, accounts, onViewTx, 
 
         {years.length>0 &&
           <div className="acc-detail-year-row">
-            <select value={yearFilter} onChange={e=>setYearFilter(e.target.value)}>
+            <select value={yearFilter}
+              onChange={e=>{ setYearFilter(e.target.value); setMonthFilter("all"); }}>
               <option value="all">全部時間</option>
               {years.map(y=><option key={y} value={y}>{y}年</option>)}
             </select>
+            {yearFilter!=="all" && monthsOfYear.length>0 &&
+              <select value={monthFilter} onChange={e=>setMonthFilter(e.target.value)}>
+                <option value="all">全年</option>
+                {monthsOfYear.map(m=><option key={m} value={m}>{parseInt(m,10)}月</option>)}
+              </select>
+            }
           </div>
         }
 
