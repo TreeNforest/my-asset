@@ -540,12 +540,18 @@
   .alloc-card .alloc-title{font-size:14px;font-weight:700;margin-bottom:10px;}
   .alloc-body{display:flex;align-items:center;gap:14px;}
   .alloc-chart{flex-shrink:0;}
-  .alloc-legend{flex:1;min-width:0;}
-  .alloc-item{display:flex;align-items:center;gap:7px;padding:4px 0;font-size:13px;}
-  .alloc-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
-  .alloc-label{color:var(--ink);flex-shrink:0;}
-  .alloc-pct{color:var(--ink-soft);font-size:12px;margin-left:auto;flex-shrink:0;}
-  .alloc-amt{font-weight:700;font-size:12px;min-width:58px;text-align:right;flex-shrink:0;}
+  .alloc-legend{flex:1;min-width:0;display:grid;grid-template-columns:auto 1fr auto auto;
+    column-gap:8px;row-gap:9px;align-items:center;}
+  /* 用 display:contents 讓每列的四個欄位直接參與上層 grid，
+     所有列的欄寬就會自動一致，百分比與金額才能垂直對齊 */
+  .alloc-item{display:contents;}
+  .alloc-dot{width:9px;height:9px;border-radius:50%;}
+  .alloc-label{color:var(--ink);font-size:13px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .alloc-pct{color:var(--ink-soft);font-size:12px;text-align:right;
+    font-variant-numeric:tabular-nums;}
+  .alloc-amt{font-weight:700;font-size:12px;text-align:right;
+    font-variant-numeric:tabular-nums;}
   @media (max-width:359px){
     .alloc-body{flex-direction:column;}
     .alloc-legend{width:100%;}
