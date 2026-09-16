@@ -538,24 +538,19 @@
     box-shadow:0 1px 3px rgba(60,50,40,.06);}
   html.dark .alloc-card{border:1px solid #2C3C28;}
   .alloc-card .alloc-title{font-size:14px;font-weight:700;margin-bottom:10px;}
-  .alloc-body{display:flex;align-items:center;gap:14px;}
+  .alloc-body{display:flex;flex-direction:column;align-items:center;gap:14px;}
   .alloc-chart{flex-shrink:0;}
-  .alloc-legend{flex:1;min-width:0;display:grid;grid-template-columns:auto 1fr auto auto;
-    column-gap:8px;row-gap:9px;align-items:center;}
-  /* 用 display:contents 讓每列的四個欄位直接參與上層 grid，
-     所有列的欄寬就會自動一致，百分比與金額才能垂直對齊 */
+  /* 圖例佔滿整排寬度：名稱欄吃掉多餘空間，百分比與金額靠右，
+     這樣金額再長也不會把「定存」「活存」擠掉 */
+  .alloc-legend{width:100%;display:grid;grid-template-columns:auto 1fr auto auto;
+    column-gap:10px;row-gap:10px;align-items:center;}
   .alloc-item{display:contents;}
   .alloc-dot{width:9px;height:9px;border-radius:50%;}
-  .alloc-label{color:var(--ink);font-size:13px;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .alloc-label{color:var(--ink);font-size:13px;white-space:nowrap;}
   .alloc-pct{color:var(--ink-soft);font-size:12px;text-align:right;
-    font-variant-numeric:tabular-nums;}
-  .alloc-amt{font-weight:700;font-size:12px;text-align:right;
-    font-variant-numeric:tabular-nums;}
-  @media (max-width:359px){
-    .alloc-body{flex-direction:column;}
-    .alloc-legend{width:100%;}
-  }
+    font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .alloc-amt{font-weight:700;font-size:13px;text-align:right;
+    font-variant-numeric:tabular-nums;white-space:nowrap;}
 
   .streak-card{background:var(--surface);border-radius:var(--radius);padding:15px 16px 13px;margin-bottom:14px;
     box-shadow:0 1px 3px rgba(60,50,40,.06);}
