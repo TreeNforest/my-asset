@@ -133,6 +133,14 @@
   .header{position:sticky;top:0;z-index:10;background:var(--bg);padding:18px 18px 8px;
     display:flex;align-items:center;justify-content:space-between;}
   .header h1{margin:0;font-size:21px;letter-spacing:.06em;font-weight:700;}
+  .header .brand{display:flex;align-items:center;gap:11px;min-width:0;}
+  .header .brand-text{min-width:0;}
+  .header .brand-line{display:flex;align-items:center;gap:9px;}
+  .header .brand-zh{font-size:20px;font-weight:700;letter-spacing:.06em;line-height:1.15;}
+  .header .brand-rule{width:1px;height:13px;background:var(--accent);opacity:.55;flex-shrink:0;}
+  .header .brand-en{font-size:10.5px;letter-spacing:.24em;text-indent:.24em;
+    color:var(--accent);font-weight:600;white-space:nowrap;}
+  .header .brand-sub{font-size:11px;color:var(--ink-soft);letter-spacing:.05em;margin-top:2px;}
   .theme-toggle{background:var(--surface);border:1px solid var(--line);border-radius:50%;
     width:36px;height:36px;font-size:20px;flex-shrink:0;box-shadow:0 1px 3px rgba(60,50,40,.06);
     display:flex;align-items:center;justify-content:center;color:var(--ink-soft);line-height:1;}
@@ -546,7 +554,7 @@
   .streak-card{background:var(--surface);border-radius:var(--radius);padding:15px 16px 13px;margin-bottom:14px;
     box-shadow:0 1px 3px rgba(60,50,40,.06);}
   html.dark .streak-card{border:1px solid #2C3C28;}
-  .streak-card .sk-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px;}
+  .streak-card .sk-head{display:flex;justify-content:space-between;align-items:center;gap:10px;}
   .streak-card .sk-num{font-size:14px;color:var(--ink-soft);}
   .streak-card .sk-num b{font-size:27px;color:var(--ink);font-weight:700;margin-right:2px;}
   .streak-card .sk-badge{display:inline-block;margin-left:7px;font-size:10px;font-weight:600;
@@ -556,19 +564,7 @@
     border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;font-family:inherit;}
   .streak-card .sk-done{flex-shrink:0;font-size:13px;color:var(--income);display:flex;align-items:center;gap:5px;
     padding-top:6px;}
-  .streak-card .sk-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
-  .streak-card .sk-wk{font-size:10px;color:var(--ink-soft);text-align:center;padding-bottom:2px;}
-  .streak-card .sk-cell{aspect-ratio:1;border-radius:4px;background:var(--field-bg);cursor:pointer;}
-  html.dark .streak-card .sk-cell{background:#243020;}
-  .streak-card .sk-cell.done{background:var(--accent);cursor:default;}
-  .streak-card .sk-cell.nospend{background:var(--accent);opacity:.42;}
-  .streak-card .sk-cell.future{background:transparent;cursor:default;}
-  .streak-card .sk-cell.today{box-shadow:0 0 0 2px var(--ink-soft);}
-  .streak-card .sk-legend{display:flex;align-items:center;gap:12px;margin-top:10px;font-size:11px;color:var(--ink-soft);}
-  .streak-card .sk-dot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;vertical-align:middle;}
-  .streak-card .sk-dot.done{background:var(--accent);}
-  .streak-card .sk-dot.nospend{background:var(--accent);opacity:.42;}
-  .streak-card .sk-tip{margin-left:auto;opacity:.75;}
+  .cal-cell .cal-nospend{font-size:9px;color:var(--ink-soft);opacity:.8;}
 
   .quick-entry{margin-bottom:14px;}
   .quick-entry .qe-row{display:flex;gap:8px;}
@@ -1922,6 +1918,21 @@ function CalcInput({value, onChange}){
   );
 }
 
+/* 頁首的品牌標記：跟 app 圖示同一組幾何，直接內嵌不用另外載圖 */
+function GroveMark({size=40}){
+  return (
+    <svg width={size} height={size} viewBox="0 0 512 512" aria-hidden="true"
+      style={{display:"block", flexShrink:0}}>
+      <rect width="512" height="512" rx="112" fill="#3A4F32"/>
+      <path d="M 256 210 L 162.47 156 A 108 108 0 1 1 325.42 292.73 Z" fill="#F1F3EC"/>
+      <path d="M 256 210 L 325.42 292.73 A 108 108 0 0 1 162.47 264 Z" fill="#6F9159"/>
+      <path d="M 256 210 L 162.47 264 A 108 108 0 0 1 162.47 156 Z" fill="#A8C293"/>
+      <rect x="239" y="300" width="34" height="86" fill="#F1F3EC"/>
+      <rect x="191" y="384" width="130" height="24" rx="12" fill="#F1F3EC"/>
+    </svg>
+  );
+}
+
 /* ── 記帳習慣：連續天數 ──
    「有記帳」的定義：當天有至少一筆「你自己記的」交易，或按了「今天沒花錢」。
    訂閱自動扣款、定存自動利息不算——那些不是你動手記的，
@@ -1957,26 +1968,12 @@ function longestStreak(set){
   return best;
 }
 
-const WEEK_LABELS = ["日","一","二","三","四","五","六"];
 function StreakCard({transactions, checkins, onToggleNoSpend}){
   const todayStr = toDateStr(new Date());
-  const { set, noSpend } = useMemo(()=>buildRecordedDays(transactions, checkins), [transactions, checkins]);
+  const { set } = useMemo(()=>buildRecordedDays(transactions, checkins), [transactions, checkins]);
   const streak = currentStreak(set, todayStr);
   const best = longestStreak(set);
   const todayDone = set.has(todayStr);
-
-  /* 最近 5 週，對齊星期欄位；今天之後的格子留白 */
-  const cells = useMemo(()=>{
-    const end = fromDateStr(todayStr);
-    end.setDate(end.getDate() + (6 - end.getDay()));   // 補到本週六
-    const out = [];
-    for(let i=34;i>=0;i--){
-      const d = new Date(end);
-      d.setDate(d.getDate()-i);
-      out.push(toDateStr(d));
-    }
-    return out;
-  }, [todayStr]);
 
   return (
     <div className="streak-card">
@@ -1998,28 +1995,6 @@ function StreakCard({transactions, checkins, onToggleNoSpend}){
             <i className="ph ph-check-circle"></i>今天已記
           </div>
         }
-      </div>
-
-      <div className="sk-grid">
-        {WEEK_LABELS.map(w=><div className="sk-wk" key={w}>{w}</div>)}
-        {cells.map(d=>{
-          const future = d>todayStr;
-          const has = set.has(d);
-          const isNo = noSpend.has(d);
-          const cls = "sk-cell" + (future?" future":"") + (has?(isNo?" nospend":" done"):"")
-                    + (d===todayStr?" today":"");
-          const title = future ? "" : d + (has ? (isNo?"：沒花錢":"：有記帳") : "：沒有紀錄");
-          return (
-            <div key={d} className={cls} title={title}
-              onClick={()=>{ if(!future && (!has || isNo)) onToggleNoSpend(d); }}>
-            </div>
-          );
-        })}
-      </div>
-      <div className="sk-legend">
-        <span><i className="sk-dot done"></i>有記帳</span>
-        <span><i className="sk-dot nospend"></i>沒花錢</span>
-        <span className="sk-tip">點空格可補登沒花錢的日子</span>
       </div>
     </div>
   );
@@ -3517,7 +3492,7 @@ function SpendingAnalysisCard({categories, accounts, monthTx, allTx, periodLabel
   );
 }
 
-function OverviewTab({categories, accounts, monthTx, allTx, periodLabel, checkins, onToggleNoSpend, onViewTx, onAdd}){
+function OverviewTab({categories, accounts, monthTx, allTx, periodLabel, onViewTx, onAdd}){
   const label = periodLabel || "本月";
   const [query, setQuery] = useState("");
   const isSearching = query.trim().length > 0;
@@ -3577,7 +3552,6 @@ function OverviewTab({categories, accounts, monthTx, allTx, periodLabel, checkin
         </React.Fragment>
         :
         <React.Fragment>
-          <StreakCard transactions={allTx} checkins={checkins} onToggleNoSpend={onToggleNoSpend} />
           <SpendingAnalysisCard categories={categories} accounts={accounts} monthTx={monthTx} allTx={allTx} periodLabel={label} />
           <div className="section-title">{label}交易</div>
           {dayGroups.length===0 && <div className="empty-hint">這段時間還沒有任何紀錄，點右下角「＋」新增一筆吧</div>}
@@ -3595,8 +3569,13 @@ function OverviewTab({categories, accounts, monthTx, allTx, periodLabel, checkin
   );
 }
 
-function CalendarTab({categories, accounts, monthTx, cursorMonth, onAddOnDate, onViewTx}){
+function CalendarTab({categories, accounts, monthTx, allTx, cursorMonth, checkins, onToggleNoSpend, onAddOnDate, onViewTx}){
   const [activeDay, setActiveDay] = useState(null);
+  const noSpendSet = useMemo(()=>{
+    const s = new Set();
+    (checkins||[]).forEach(c=>{ if(c.date) s.add(c.date); });
+    return s;
+  }, [checkins]);
   const dim = daysInMonth(cursorMonth);
   const firstDow = new Date(cursorMonth.getFullYear(), cursorMonth.getMonth(), 1).getDay();
   const todayStr = toDateStr(new Date());
@@ -3641,6 +3620,7 @@ function CalendarTab({categories, accounts, monthTx, cursorMonth, onAddOnDate, o
 
   return (
     <div>
+      <StreakCard transactions={allTx||monthTx} checkins={checkins} onToggleNoSpend={onToggleNoSpend} />
       <div className="calendar-grid">
         {["日","一","二","三","四","五","六"].map(w=><div className="cal-dow" key={w}>{w}</div>)}
         {cells.map((d,i)=>{
@@ -3649,11 +3629,13 @@ function CalendarTab({categories, accounts, monthTx, cursorMonth, onAddOnDate, o
           const dayTx = txOnDay(d);
           const incomeSum = dayTx.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);
           const expenseSum = dayTx.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+          const noSpendDay = noSpendSet.has(ds);   // 打過「今天沒花錢」的日子
           return (
             <div key={i} className={"cal-cell"+(ds===todayStr?" today":"")} onClick={()=>setActiveDay(d)}>
               <span className="cal-day-num">{d}</span>
               {incomeSum>0 && <span className="cal-num income">{Math.round(incomeSum)}</span>}
               {expenseSum>0 && <span className="cal-num expense">{Math.round(expenseSum)}</span>}
+              {noSpendDay && dayTx.length===0 && <span className="cal-nospend">沒花錢</span>}
             </div>
           );
         })}
@@ -6036,7 +6018,17 @@ function App(){
   return (
     <div className="app">
       <div className="header">
-        <h1>林間帳本 Grove</h1>
+        <div className="brand">
+          <GroveMark size={40} />
+          <div className="brand-text">
+            <h1 className="brand-line">
+              <span className="brand-zh">林間帳本</span>
+              <span className="brand-rule"></span>
+              <span className="brand-en">GROVE</span>
+            </h1>
+            <div className="brand-sub">資產與記帳</div>
+          </div>
+        </div>
         <button className="theme-toggle" onClick={()=>setShowSettings(true)}>
           <i className="ph-duotone ph-gear"></i>
         </button>
@@ -6069,10 +6061,10 @@ function App(){
             {homeMode==="list" ?
               <OverviewTab categories={categories} accounts={accounts} monthTx={rangeTx} allTx={transactions}
                 periodLabel={homeRangeMode==="custom"?"區間":"本月"}
-                checkins={checkins} onToggleNoSpend={toggleNoSpend}
                 onViewTx={openViewTx} />
               :
-              <CalendarTab categories={categories} accounts={accounts} monthTx={monthTx} cursorMonth={cursorMonth}
+              <CalendarTab categories={categories} accounts={accounts} monthTx={monthTx} allTx={transactions}
+                cursorMonth={cursorMonth} checkins={checkins} onToggleNoSpend={toggleNoSpend}
                 onAddOnDate={(ds)=>{setPresetDate(ds); setPresetType(null); setEditingTx(null); setAddKind("txn"); setShowAdd(true);}}
                 onViewTx={openViewTx} />
             }
