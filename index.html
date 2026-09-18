@@ -105,7 +105,7 @@
   /* ── 開場畫面 ── */
   #splash{
     position:fixed; inset:0; z-index:9999;
-    background:#314931;              /* 與插畫本身的底色相同，圖片邊緣才看不出接縫 */
+    background:#314931;              /* 純深綠底；書本已去背，直接躺在這個顏色上 */
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:0; padding:24px;
     transition:opacity .45s ease;
@@ -113,8 +113,8 @@
   #splash img{
     width:min(52vw, 210px);
     height:auto; display:block;
-    border-radius:3px;
-    box-shadow:0 10px 30px rgba(0,0,0,.28);
+    /* drop-shadow 會沿著去背後的書本輪廓，不像 box-shadow 會畫出一個方框 */
+    filter:drop-shadow(0 12px 22px rgba(0,0,0,.32));
   }
   #splash .splash-name{
     margin-top:26px; font-size:21px; letter-spacing:.14em;
@@ -519,8 +519,17 @@
   .acc-section-title h3{margin:0;font-size:17px;font-weight:700;display:flex;align-items:center;gap:6px;}
   .acc-section-title button{background:var(--accent);color:#fff;border:none;border-radius:8px;
     padding:6px 10px;font-size:13px;font-weight:600;}
+  /* 滑動列：外層裁切，操作鈕墊在底下，內層 .acc-row 橫向位移露出它們 */
+  .acc-row-wrap{position:relative;overflow:hidden;border-radius:10px;margin-bottom:6px;}
+  .acc-swipe-actions{position:absolute;top:0;right:0;bottom:0;display:flex;}
+  .acc-swipe-actions button{flex:1;border:none;font-family:inherit;font-size:12px;font-weight:600;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff;}
+  .acc-swipe-actions button i{font-size:17px;}
+  .acc-swipe-actions .sw-edit{background:var(--accent);}
+  .acc-swipe-actions .sw-del{background:var(--warn);}
   .acc-row{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:10px;
-    padding:9px 10px;margin-bottom:6px;box-shadow:0 1px 2px rgba(60,50,40,.05);}
+    padding:11px 10px;box-shadow:0 1px 2px rgba(60,50,40,.05);position:relative;
+    touch-action:pan-y;will-change:transform;}
   .acc-row-main{display:flex;align-items:center;gap:10px;flex:1;min-width:0;cursor:pointer;}
   .acc-icon{width:34px;height:34px;border-radius:50%;background:var(--bg);display:flex;align-items:center;
     justify-content:center;font-size:17px;flex-shrink:0;overflow:hidden;}
@@ -528,7 +537,9 @@
   .acc-row .name{flex:1;font-size:16px;font-weight:600;min-width:0;}
   .acc-name-wrap{flex:1;min-width:0;display:flex;flex-direction:column;}
   .acc-sub{font-size:13px;color:var(--ink-soft);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400;}
-  .acc-row .bal{font-size:14px;color:var(--ink-soft);white-space:nowrap;}
+  .acc-row .bal{font-size:18px;font-weight:700;color:var(--ink);white-space:nowrap;
+    font-variant-numeric:tabular-nums;}
+  .acc-row .bal.neg{color:var(--expense);}
   .acc-detail-balance{text-align:center;padding:6px 0 14px;}
   .pay-card-btn{width:100%;padding:13px;border:none;border-radius:12px;background:var(--income-soft);
     color:var(--income);font-size:15px;font-weight:700;font-family:inherit;display:flex;
@@ -748,7 +759,7 @@
 <body>
 <!-- 開場畫面：寫在 body 裡，開啟就立刻看到，不必等 React 載入 -->
 <div id="splash">
-  <img src="./splash-book.jpg" alt="" />
+  <img src="./splash-book.png" alt="" />
   <div class="splash-name">林間帳本</div>
   <div class="splash-sub">GROVE</div>
 </div>
@@ -4113,26 +4124,79 @@ function CategoriesSection({categories, onAddCategory, onEditCategory, onDeleteC
   );
 }
 
-function AccountRow({acc, transactions, dragHandlers, onView, onEdit, onDelete}){
+const SWIPE_W = 132;   // 編輯＋刪除兩顆按鈕的總寬度
+
+function AccountRow({acc, transactions, dragHandlers, openSwipe, onOpenSwipe, onView, onEdit, onDelete}){
   const bal = accountBalance(acc, transactions);
   const neg = isLiability(acc.type) ? bal>0 : bal<0;
   const isFixed = acc.type==="fixed" && acc.rate;
+
+  const open = openSwipe===acc.id;
+  const [dx, setDx] = useState(0);          // 拖曳中的即時位移
+  const start = useRef(null);               // {x,y,locked} locked:已判定是水平滑動
+  const moved = useRef(false);
+
+  function onTouchStart(e){
+    const t = e.touches[0];
+    start.current = { x:t.clientX, y:t.clientY, locked:false };
+    moved.current = false;
+  }
+  function onTouchMove(e){
+    if(!start.current) return;
+    const t = e.touches[0];
+    const ddx = t.clientX - start.current.x;
+    const ddy = t.clientY - start.current.y;
+    if(!start.current.locked){
+      /* 還沒判定方向：橫向明顯大於縱向才接管，否則讓頁面正常上下捲動 */
+      if(Math.abs(ddx) < 8 && Math.abs(ddy) < 8) return;
+      if(Math.abs(ddx) <= Math.abs(ddy)){ start.current = null; return; }
+      start.current.locked = true;
+    }
+    moved.current = true;
+    const base = open ? -SWIPE_W : 0;
+    let next = base + ddx;
+    if(next > 0) next = 0;                        // 不給往右拉出空白
+    if(next < -SWIPE_W) next = -SWIPE_W + (next+SWIPE_W)*0.15;   // 超過按鈕寬度後變得很難拉
+    setDx(next);
+    if(e.cancelable) e.preventDefault();
+  }
+  function onTouchEnd(){
+    if(!start.current || !moved.current){ start.current=null; setDx(0); return; }
+    start.current = null;
+    const shouldOpen = dx < -SWIPE_W/2.2;
+    setDx(0);
+    onOpenSwipe(shouldOpen ? acc.id : null);
+  }
+
+  const offset = dx!==0 ? dx : (open ? -SWIPE_W : 0);
+
   return (
-    <div className="acc-row">
-      <span className="drag-handle" {...dragHandlers}>≡</span>
-      <div className="acc-row-main" onClick={()=>onView(acc)}>
-        <div className={"acc-icon"+(acc.type==="credit"?" card-shape":"")}>
-          {acc.iconImage ? <img src={acc.iconImage} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : renderCatIcon(acc.icon||"💰",20)}
-        </div>
-        <div className="acc-name-wrap">
-          <span className="name">{acc.name}</span>
-          {isFixed && <span className="acc-sub">利率 {acc.rate}%・每月利息 {fmtMoney(monthlyInterest(acc))}</span>}
-          {acc.excludeFromNetWorth && <span className="acc-sub">不計入淨資產</span>}
-        </div>
-        <span className={"bal"+(neg?" neg":"")}>{fmtMoney(Math.abs(bal))}</span>
+    <div className={"acc-row-wrap"+(open?" open":"")}>
+      <div className="acc-swipe-actions" style={{width:SWIPE_W}}>
+        <button className="sw-edit" onClick={()=>{ onOpenSwipe(null); onEdit(acc); }}>
+          <i className="ph ph-pencil-simple"></i>編輯
+        </button>
+        <button className="sw-del" onClick={()=>{ onOpenSwipe(null); onDelete(acc); }}>
+          <i className="ph ph-trash"></i>刪除
+        </button>
       </div>
-      <button className="icon-btn" onClick={()=>onEdit(acc)}><i className="ph ph-pencil-line"></i></button>
-      <button className="icon-btn" onClick={()=>onDelete(acc)}><i className="ph ph-trash"></i></button>
+      <div className="acc-row"
+        style={{transform:"translateX("+offset+"px)", transition: dx!==0 ? "none" : "transform .22s ease"}}
+        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>
+        <span className="drag-handle" {...dragHandlers}>≡</span>
+        <div className="acc-row-main"
+          onClick={()=>{ if(open){ onOpenSwipe(null); return; } onView(acc); }}>
+          <div className={"acc-icon"+(acc.type==="credit"?" card-shape":"")}>
+            {acc.iconImage ? <img src={acc.iconImage} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} /> : renderCatIcon(acc.icon||"💰",20)}
+          </div>
+          <div className="acc-name-wrap">
+            <span className="name">{acc.name}</span>
+            {isFixed && <span className="acc-sub">利率 {acc.rate}%・每月利息 {fmtMoney(monthlyInterest(acc))}</span>}
+            {acc.excludeFromNetWorth && <span className="acc-sub">不計入淨資產</span>}
+          </div>
+          <span className={"bal"+(neg?" neg":"")}>{fmtMoney(Math.abs(bal))}</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -4400,6 +4464,7 @@ function AccountsSection({accounts, transactions, categories, onViewTx, onAddAcc
   const [modal, setModal] = useState(null); // {initial, defaultType}
   const [viewingAcc, setViewingAcc] = useState(null);
   const [payCard, setPayCard] = useState(null); // {card, amountDue}
+  const [openSwipe, setOpenSwipe] = useState(null);  // 目前滑開的那一列帳戶 id（一次只開一列）
 
   function handleDelete(acc){
     if(!confirm("確定刪除「"+acc.name+"」？已記錄在這個帳戶的交易仍會保留，但不再計入任何帳戶餘額。")) return;
@@ -4421,6 +4486,7 @@ function AccountsSection({accounts, transactions, categories, onViewTx, onAddAcc
               onReorder={(newList)=>onReorderGroup(newList)}
               renderRow={(acc, dragHandlers)=>
                 <AccountRow acc={acc} transactions={transactions} dragHandlers={dragHandlers}
+                  openSwipe={openSwipe} onOpenSwipe={setOpenSwipe}
                   onView={(a)=>setViewingAcc(a)}
                   onEdit={(a)=>setModal({initial:a})} onDelete={handleDelete} />
               } />
