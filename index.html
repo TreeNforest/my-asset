@@ -578,6 +578,40 @@
     padding-top:6px;}
   .cal-cell .cal-nospend{font-size:9px;color:var(--ink-soft);opacity:.8;}
 
+  .piggy-hero{background:var(--surface);border-radius:var(--radius);padding:20px 16px 16px;
+    margin-bottom:14px;text-align:center;box-shadow:0 1px 3px rgba(60,50,40,.06);}
+  html.dark .piggy-hero{border:1px solid #2C3C28;}
+  .piggy-hero .ph-label{font-size:12px;color:var(--ink-soft);}
+  .piggy-hero .ph-amt{font-size:32px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums;}
+  .piggy-hero .ph-convert{font-size:12px;color:var(--accent);margin-top:5px;}
+  .piggy-hero .ph-stats{display:flex;justify-content:center;flex-wrap:wrap;gap:4px 14px;
+    margin-top:12px;font-size:11px;color:var(--ink-soft);}
+  .piggy-hero .ph-btns{display:flex;gap:8px;margin-top:16px;}
+  .piggy-hero .ph-btns button{flex:1;border:none;border-radius:11px;padding:12px;
+    font-size:14px;font-weight:700;font-family:inherit;display:flex;align-items:center;
+    justify-content:center;gap:6px;}
+  .piggy-hero .ph-btns button i{font-size:17px;}
+  .piggy-hero .ph-add{background:var(--solid);color:#fff;}
+  .piggy-hero .ph-invest{background:var(--income-soft);color:var(--income);}
+
+  .piggy-chips{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 12px;}
+  .piggy-chips button{border:1px solid var(--line);background:var(--field-bg);color:var(--ink-soft);
+    border-radius:20px;padding:5px 11px;font-size:12px;font-family:inherit;}
+
+  .piggy-row{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:10px;
+    padding:10px 12px;margin-bottom:6px;box-shadow:0 1px 2px rgba(60,50,40,.05);}
+  html.dark .piggy-row{border:1px solid #2C3C28;}
+  .piggy-row .pr-icon{width:32px;height:32px;border-radius:50%;background:var(--field-bg);
+    display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--accent);flex-shrink:0;}
+  .piggy-row .pr-icon.out{color:var(--income);}
+  .piggy-row .pr-mid{flex:1;min-width:0;}
+  .piggy-row .pr-label{font-size:15px;font-weight:600;}
+  .piggy-row .pr-date{font-size:11px;color:var(--ink-soft);margin-top:1px;}
+  .piggy-row .pr-amt{font-size:16px;font-weight:700;color:var(--accent);white-space:nowrap;
+    font-variant-numeric:tabular-nums;}
+  .piggy-row .pr-amt.out{color:var(--income);}
+  .piggy-row .pr-del{background:none;border:none;color:var(--ink-soft);padding:4px;font-size:14px;flex-shrink:0;}
+
   .quick-entry{margin-bottom:14px;}
   .quick-entry .qe-row{display:flex;gap:8px;}
   .quick-entry input{flex:1;min-width:0;padding:11px 12px;border:1px solid var(--line);
@@ -1926,6 +1960,190 @@ function CalcInput({value, onChange}){
         <button type="button" className="calc-key wide" onClick={()=>press("0")}>0</button>
         <button type="button" className="calc-key wide" onClick={()=>press(".")}>.</button>
       </div>
+    </div>
+  );
+}
+
+/* ── 撲滿：忍住一次不必要的消費，就把那筆錢記進來 ──
+   這是「心理帳戶」，不動任何真實帳戶餘額：
+   錢本來就還在你戶頭裡，沒有被花掉而已。真正的動作發生在「拿去投資」那一刻。 */
+function piggyBalance(entries){
+  return (entries||[]).reduce((s,e)=>s + (e.kind==="out" ? -(+e.amount||0) : (+e.amount||0)), 0);
+}
+function PiggyModal({initial, onSave, onClose, recentLabels}){
+  const [amount, setAmount] = useState(initial?String(initial.amount):"");
+  const [label, setLabel] = useState((initial&&initial.label)||"");
+  const [date, setDate] = useState((initial&&initial.date)||toDateStr(new Date()));
+  function submit(){
+    const n = Math.round(safeEval(amount));
+    if(!(n>0)){ alert("請輸入金額"); return; }
+    onSave({ kind:"save", amount:n, label:label.trim(), date });
+  }
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>{initial?"編輯紀錄":"我忍住了"}</h2>
+        <div className="field">
+          <label>本來要花多少</label>
+          <input type="number" inputMode="decimal" autoFocus value={amount}
+            onChange={e=>setAmount(e.target.value)} placeholder="例如 65" />
+        </div>
+        <div className="field">
+          <label>忍住了什麼（選填）</label>
+          <input type="text" value={label} onChange={e=>setLabel(e.target.value)} placeholder="例如 珍奶" />
+        </div>
+        {recentLabels && recentLabels.length>0 && !initial &&
+          <div className="piggy-chips">
+            {recentLabels.map(r=>
+              <button key={r.label} onClick={()=>{ setLabel(r.label); if(!amount) setAmount(String(r.amount)); }}>
+                {r.label} {r.amount}
+              </button>
+            )}
+          </div>
+        }
+        <div className="field">
+          <label>日期</label>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)} />
+        </div>
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>存進撲滿</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PiggyInvestModal({balance, investments, onSave, onClose}){
+  const [amount, setAmount] = useState(String(Math.round(balance)));
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState(toDateStr(new Date()));
+  const amt = Math.round(safeEval(amount));
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>拿去投資</h2>
+        <div style={{fontSize:13,color:"var(--ink-soft)",marginBottom:12}}>
+          撲滿裡有 {fmtMoney(balance)}。實際下單請到券商操作，這裡只是把它從撲滿結算掉、留下紀錄。
+        </div>
+        <div className="field">
+          <label>投入金額</label>
+          <input type="number" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>投入到哪（選填）</label>
+          <input type="text" value={note} onChange={e=>setNote(e.target.value)} placeholder="例如 0050" />
+        </div>
+        <div className="field">
+          <label>日期</label>
+          <input type="date" value={date} onChange={e=>setDate(e.target.value)} />
+        </div>
+        {amt>balance &&
+          <div style={{fontSize:12,color:"var(--warn)",marginTop:-4,marginBottom:10}}>
+            超過撲滿裡的金額，結算後會變成負的
+          </div>
+        }
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={()=>{
+            if(!(amt>0)){ alert("請輸入金額"); return; }
+            onSave({ kind:"out", amount:amt, label:note.trim(), date });
+          }}>結算</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PiggySection({piggy, investments, onAdd, onDelete}){
+  const [modal, setModal] = useState(false);
+  const [investModal, setInvestModal] = useState(false);
+  const entries = (piggy||[]).slice().sort((a,b)=>
+    (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0));
+  const balance = piggyBalance(entries);
+  const saves = entries.filter(e=>e.kind!=="out");
+  const totalSaved = saves.reduce((s,e)=>s+(+e.amount||0),0);
+  const totalInvested = entries.filter(e=>e.kind==="out").reduce((s,e)=>s+(+e.amount||0),0);
+
+  /* 常忍住的項目：拿最近的，同名只留一個，給快速填入用 */
+  const recentLabels = useMemo(()=>{
+    const seen = new Map();
+    saves.forEach(e=>{
+      if(e.label && !seen.has(e.label)) seen.set(e.label, {label:e.label, amount:+e.amount||0});
+    });
+    return Array.from(seen.values()).slice(0,5);
+  }, [piggy]);
+
+  /* 換算成熟悉的單位：撲滿裡的錢約可買幾股 */
+  const convert = useMemo(()=>{
+    const held = (investments||[]).filter(i=>(+i.currentPrice||0)>0);
+    if(!held.length || balance<=0) return null;
+    const target = held.find(i=>String(i.symbol).startsWith("00")) || held[0];
+    const shares = Math.floor(balance / (+target.currentPrice));
+    return shares>0 ? { name:target.name, symbol:target.symbol, shares } : null;
+  }, [investments, balance]);
+
+  return (
+    <div>
+      <div className="piggy-hero">
+        <div className="ph-label">撲滿裡有</div>
+        <div className="ph-amt">{fmtMoney(balance)}</div>
+        {convert &&
+          <div className="ph-convert">約可買 {convert.name} {convert.shares} 股</div>
+        }
+        <div className="ph-stats">
+          <span>忍住 {saves.length} 次</span>
+          <span>累計存入 {fmtMoney(totalSaved)}</span>
+          {totalInvested>0 && <span>已投入 {fmtMoney(totalInvested)}</span>}
+        </div>
+        <div className="ph-btns">
+          <button className="ph-add" onClick={()=>setModal(true)}>
+            <i className="ph ph-hand-palm"></i>我忍住了
+          </button>
+          {balance>0 &&
+            <button className="ph-invest" onClick={()=>setInvestModal(true)}>
+              <i className="ph ph-trend-up"></i>拿去投資
+            </button>
+          }
+        </div>
+      </div>
+
+      <div className="acc-section">
+        <div className="acc-section-title"><h3>🫙 紀錄</h3></div>
+        {entries.length===0 &&
+          <div className="empty-hint">下次想買飲料又忍住的時候，按「我忍住了」把那筆錢存進來</div>}
+        {entries.map(e=>{
+          const out = e.kind==="out";
+          return (
+            <div className="piggy-row" key={e.id}>
+              <div className={"pr-icon"+(out?" out":"")}>
+                <i className={out?"ph ph-trend-up":"ph ph-hand-palm"}></i>
+              </div>
+              <div className="pr-mid">
+                <div className="pr-label">{e.label || (out?"投入投資":"忍住了")}</div>
+                <div className="pr-date">{(e.date||"").slice(5)}</div>
+              </div>
+              <div className={"pr-amt"+(out?" out":"")}>{out?"−":"+"}{fmtMoney(e.amount)}</div>
+              <button className="pr-del" onClick={()=>{
+                if(confirm("刪除這筆紀錄？")) onDelete(e.id);
+              }}><i className="ph ph-trash"></i></button>
+            </div>
+          );
+        })}
+      </div>
+
+      {modal &&
+        <PiggyModal recentLabels={recentLabels}
+          onClose={()=>setModal(false)}
+          onSave={(data)=>{ onAdd(data); setModal(false); }} />
+      }
+      {investModal &&
+        <PiggyInvestModal balance={balance} investments={investments}
+          onClose={()=>setInvestModal(false)}
+          onSave={(data)=>{ onAdd(data); setInvestModal(false); }} />
+      }
     </div>
   );
 }
@@ -5490,7 +5708,8 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
   onAddAccount, onEditAccount, onDeleteAccount, onReorderGroup,
   onAddInvestment, onEditInvestment, onDeleteInvestment,
   onAddSubscription, onEditSubscription, onDeleteSubscription,
-  onAddWishlist, onEditWishlist, onDeleteWishlist, onAddTx, onPayCard}){
+  onAddWishlist, onEditWishlist, onDeleteWishlist, onAddTx, onPayCard,
+  piggy, onAddPiggy, onDeletePiggy}){
   const [mode, setMode] = useState("account");
   const [masked, setMasked] = useState(()=>{
     try{ return localStorage.getItem("grove_default_masked")!=="false"; }
@@ -5538,6 +5757,7 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
       <div className="settings-mode-toggle">
         <button className={mode==="account"?"active":""} onClick={()=>setMode("account")}>帳戶</button>
         <button className={mode==="invest"?"active":""} onClick={()=>setMode("invest")}>投資</button>
+        <button className={mode==="piggy"?"active":""} onClick={()=>setMode("piggy")}>撲滿</button>
         <button className={mode==="subscription"?"active":""} onClick={()=>setMode("subscription")}>訂閱</button>
         <button className={mode==="wish"?"active":""} onClick={()=>setMode("wish")}>願望</button>
       </div>
@@ -5554,6 +5774,10 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
       {mode==="invest" &&
         <InvestmentsSection investments={investments}
           onAddInvestment={onAddInvestment} onEditInvestment={onEditInvestment} onDeleteInvestment={onDeleteInvestment} />
+      }
+      {mode==="piggy" &&
+        <PiggySection piggy={piggy||[]} investments={investments}
+          onAdd={onAddPiggy} onDelete={onDeletePiggy} />
       }
       {mode==="wish" &&
         <WishlistSection wishlists={wishlists||[]}
@@ -5643,6 +5867,7 @@ function App(){
   const [transactions, setTransactions] = useState([]);
   const [budgets, setBudgets] = useState([]);
   const [checkins, setCheckins] = useState([]);   // 「今天沒花錢」的打卡紀錄
+  const [piggy, setPiggy] = useState([]);         // 撲滿：忍住的消費與投入紀錄
   const [accounts, setAccounts] = useState([]);
   const [investments, setInvestments] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
@@ -5701,6 +5926,13 @@ function App(){
   useEffect(()=>{
     const unsub = onSnapshot(collection(db,"checkins"), snap=>{
       setCheckins(snap.docs.map(d=>({id:d.id, ...d.data()})));
+    });
+    return unsub;
+  }, []);
+
+  useEffect(()=>{
+    const unsub = onSnapshot(collection(db,"piggy"), snap=>{
+      setPiggy(snap.docs.map(d=>({id:d.id, ...d.data()})));
     });
     return unsub;
   }, []);
@@ -5892,6 +6124,17 @@ function App(){
   }
   /* 「今天沒花錢」打卡：再按一次就取消。
      那天若已經有真的記帳，就不需要打卡，直接忽略。 */
+  async function addPiggy(data){
+    try{
+      await addDoc(collection(db,"piggy"), {...data, createdAt:Date.now()});
+      flash(data.kind==="out" ? "已結算" : "存進撲滿了");
+    }catch(e){ alert("儲存失敗："+e.message); }
+  }
+  async function deletePiggy(id){
+    try{ await deleteDoc(doc(db,"piggy",id)); flash("已刪除"); }
+    catch(e){ alert("刪除失敗："+e.message); }
+  }
+
   async function toggleNoSpend(dateStr){
     try{
       const existing = checkins.find(c=>c.date===dateStr);
@@ -6149,6 +6392,7 @@ function App(){
             onAddInvestment={addInvestment} onEditInvestment={editInvestment} onDeleteInvestment={deleteInvestment}
             onAddSubscription={addSubscription} onEditSubscription={editSubscription} onDeleteSubscription={deleteSubscription}
             wishlists={wishlists} onAddWishlist={addWishlist} onEditWishlist={editWishlist} onDeleteWishlist={deleteWishlist}
+            piggy={piggy} onAddPiggy={addPiggy} onDeletePiggy={deletePiggy}
             onAddTx={saveTx} onPayCard={payCard} />
         }
       </div>
