@@ -79,8 +79,7 @@
     border:1px solid #2C3C28;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  @font-face{font-family:'CreamFont';src:url('./creamfont-3.3.otf') format('opentype');font-display:swap;font-style:normal;font-weight:normal;}
-  @font-face{font-family:'RixingSong';src:url('./rixingsong-1.0-semibold.otf') format('opentype');font-display:swap;font-style:normal;font-weight:normal;}
+  /* @font-face 改由下方 loadFont() 按需插入：只載目前選的那一套 */
   html[data-font="cream"]   body, html[data-font="cream"]   input, html[data-font="cream"]   select, html[data-font="cream"]   button, html[data-font="cream"]   textarea { font-family:'CreamFont',-apple-system,"PingFang TC","Noto Sans TC",sans-serif; }
   html[data-font="rixing"]  body, html[data-font="rixing"]  input, html[data-font="rixing"]  select, html[data-font="rixing"]  button, html[data-font="rixing"]  textarea { font-family:'RixingSong',-apple-system,"PingFang TC","Noto Sans TC",sans-serif; }
   html[data-font="lxgw"]    body, html[data-font="lxgw"]    input, html[data-font="lxgw"]    select, html[data-font="lxgw"]    button, html[data-font="lxgw"]    textarea { font-family:'LXGW WenKai TC',-apple-system,"PingFang TC",sans-serif; }
@@ -786,9 +785,7 @@
     padding:9px 16px;border-radius:10px;font-size:14px;z-index:40;}
 </style>
 <script src="https://unpkg.com/@phosphor-icons/web@2.1.1" crossorigin="anonymous"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@300;400;700&family=Noto+Serif+TC:wght@300;400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <!-- 開場畫面：寫在 body 裡，開啟就立刻看到，不必等 React 載入 -->
@@ -809,9 +806,39 @@
 }
 </script>
 <script>
+/* 字型按需載入：只下載目前選用的那一套。
+   以前是四套字型（含兩個本機 OTF 和八個 Google 字重）一律載，
+   但同一時間只會用到一套，其餘都是白白下載。 */
 (function(){
+  var LOCAL = {
+    cream:  { family:'CreamFont',  url:'./creamfont-3.3.otf' },
+    rixing: { family:'RixingSong', url:'./rixingsong-1.0-semibold.otf' }
+  };
+  var GOOGLE = {
+    lxgw: 'https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@300;400;700&display=swap',
+    noto: 'https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600;700&display=swap'
+  };
+  var loaded = {};
+
+  window.loadFont = function(key){
+    if(key==='system' || loaded[key]) return;
+    loaded[key] = true;
+    if(LOCAL[key]){
+      var st = document.createElement('style');
+      st.textContent = "@font-face{font-family:'"+LOCAL[key].family+"';src:url('"+LOCAL[key].url+
+        "') format('opentype');font-display:swap;font-style:normal;font-weight:normal;}";
+      document.head.appendChild(st);
+    }else if(GOOGLE[key]){
+      var ln = document.createElement('link');
+      ln.rel = 'stylesheet';
+      ln.href = GOOGLE[key];
+      document.head.appendChild(ln);
+    }
+  };
+
   var f = localStorage.getItem('grove_font')||'cream';
   document.documentElement.setAttribute('data-font', f);
+  window.loadFont(f);
 })();
 </script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
@@ -4757,6 +4784,13 @@ function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
     try{ return localStorage.getItem("grove_font")||"cream"; }catch(e){ return "cream"; }
   });
 
+  /* 設定頁要用各自的字體預覽字型名稱，開啟這頁時才把其餘幾套補載進來。
+     平常使用 app 不會下載到這些。 */
+  useEffect(()=>{
+    if(!window.loadFont) return;
+    ["cream","rixing","lxgw","noto"].forEach(k=>window.loadFont(k));
+  }, []);
+
   const FONTS = [
     {key:"cream",  label:"CreamFont",    desc:"暖系手寫感，原版預設"},
     {key:"rixing", label:"日星宋體",       desc:"傳統印刷宋體，溫潤典雅"},
@@ -4766,6 +4800,7 @@ function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
   ];
 
   function applyFont(key){
+    if(window.loadFont) window.loadFont(key);   // 第一次選到才下載這套字型
     setCurrentFont(key);
     try{ localStorage.setItem("grove_font", key); }catch(e){}
     document.documentElement.setAttribute("data-font", key);
@@ -4892,7 +4927,7 @@ function SettingsOverlay({darkMode, setDarkMode, categories, transactions,
           </div>
         </div>
 
-        {/* 字型 */}
+        {/* 字型。預覽要用各自的字體顯示名稱，所以進到這頁時才把其餘幾套補載進來 */}
         <div className="sfp-section" style={{marginBottom:12}}>
           <h3>字型</h3>
           {FONTS.map(f=>(
