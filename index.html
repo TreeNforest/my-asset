@@ -611,6 +611,12 @@
   .piggy-row .pr-amt.out{color:var(--income);}
   .piggy-row .pr-del{background:none;border:none;color:var(--ink-soft);padding:4px;font-size:14px;flex-shrink:0;}
 
+  .nospend-btn{width:100%;border:1px solid var(--line);background:var(--field-bg);color:var(--ink);
+    border-radius:11px;padding:12px;font-size:14px;font-weight:600;font-family:inherit;
+    display:flex;align-items:center;justify-content:center;gap:7px;margin:8px 0 2px;}
+  .nospend-btn i{font-size:17px;}
+  .nospend-btn.on{background:var(--income-soft);border-color:transparent;color:var(--income);}
+
   .quick-entry{margin-bottom:14px;}
   .quick-entry .qe-row{display:flex;gap:8px;}
   .quick-entry input{flex:1;min-width:0;padding:11px 12px;border:1px solid var(--line);
@@ -3725,11 +3731,20 @@ function CalendarTab({categories, accounts, monthTx, allTx, cursorMonth, checkin
           <div className="sheet" onClick={e=>e.stopPropagation()}>
             <div className="sheet-handle"></div>
             <h2>{cursorMonth.getMonth()+1}月{activeDay}日</h2>
-            {dayList.length===0 && <div className="empty-hint">這天還沒有紀錄</div>}
+            {dayList.length===0 && !noSpendSet.has(activeDs) &&
+              <div className="empty-hint">這天還沒有紀錄</div>}
             {dayList.map(t=>
               <TxRow key={t.id} t={t} categories={categories} accounts={accounts}
                 onClick={()=>{setActiveDay(null); onViewTx(t);}} />
             )}
+            {/* 這天沒有任何交易時，可以補登「沒花錢」讓連續記帳不中斷 */}
+            {dayList.length===0 && activeDs<=toDateStr(new Date()) &&
+              <button className={"nospend-btn"+(noSpendSet.has(activeDs)?" on":"")}
+                onClick={()=>{ onToggleNoSpend(activeDs); setActiveDay(null); }}>
+                <i className={noSpendSet.has(activeDs)?"ph ph-check-circle":"ph ph-hand-palm"}></i>
+                {noSpendSet.has(activeDs) ? "已標記沒花錢（點一下取消）" : "這天沒花錢"}
+              </button>
+            }
             <div className="btn-row">
               <button className="btn ghost" onClick={()=>setActiveDay(null)}>關閉</button>
               <button className="btn primary" onClick={()=>{onAddOnDate(activeDs); setActiveDay(null);}}>＋ 在這天新增</button>
@@ -6001,6 +6016,34 @@ function App(){
   async function deleteWishlist(id){ await deleteDoc(doc(db,"wishlists",id)); }
 
   const showMonthSwitcher = tab==="home" && (homeMode==="calendar" || homeRangeMode==="month");
+
+  /* 首頁左右滑切換月份。只在「月份模式」有效（自訂區間沒有上下個月的概念）。
+     判定方式跟帳戶列滑動一樣：橫向明顯大於縱向才接管，否則讓頁面正常捲動。 */
+  const swipeStart = useRef(null);
+  const monthSwipe = (homeMode==="calendar" || homeRangeMode==="month") ? {
+    onTouchStart(e){
+      if(e.touches.length!==1){ swipeStart.current=null; return; }
+      const t=e.touches[0];
+      swipeStart.current={x:t.clientX, y:t.clientY, locked:false, fired:false};
+    },
+    onTouchMove(e){
+      const s=swipeStart.current;
+      if(!s || s.fired) return;
+      const t=e.touches[0];
+      const dx=t.clientX-s.x, dy=t.clientY-s.y;
+      if(!s.locked){
+        if(Math.abs(dx)<12 && Math.abs(dy)<12) return;
+        if(Math.abs(dx) <= Math.abs(dy)*1.5){ swipeStart.current=null; return; }  // 偏垂直就放行捲動
+        s.locked=true;
+      }
+      if(Math.abs(dx) > 70){
+        s.fired=true;                         // 一次滑動只切一個月
+        if(dx < 0) nextMonth(); else prevMonth();
+      }
+    },
+    onTouchEnd(){ swipeStart.current=null; },
+    onTouchCancel(){ swipeStart.current=null; },
+  } : {};
   const showDateRangeRow = tab==="home" && homeMode==="list" && homeRangeMode==="custom";
 
   return (
@@ -6041,7 +6084,7 @@ function App(){
 
       <div className="content">
         {tab==="home" &&
-          <React.Fragment>
+          <div {...monthSwipe}>
             <div className="mode-toggle">
               <button className={homeMode==="list"?"active":""} onClick={()=>setHomeMode("list")}>收支清冊</button>
               <button className={homeMode==="calendar"?"active":""} onClick={()=>setHomeMode("calendar")}>日曆</button>
@@ -6056,7 +6099,7 @@ function App(){
                 onAddOnDate={(ds)=>{setPresetDate(ds); setPresetType(null); setEditingTx(null); setAddKind("txn"); setShowAdd(true);}}
                 onViewTx={openViewTx} />
             }
-          </React.Fragment>
+          </div>
         }
         {tab==="analysis" &&
           <AnalysisTab categories={categories} transactions={transactions} accounts={accounts} investments={investments} />
