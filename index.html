@@ -611,6 +611,37 @@
   .piggy-row .pr-amt.out{color:var(--income);}
   .piggy-row .pr-del{background:none;border:none;color:var(--ink-soft);padding:4px;font-size:14px;flex-shrink:0;}
 
+  .rem-banner{margin-bottom:14px;display:flex;flex-direction:column;gap:8px;}
+  .rem-item{display:flex;align-items:center;gap:11px;background:var(--income-soft);
+    border-radius:12px;padding:11px 12px;}
+  .rem-item.overdue{background:var(--expense-soft);}
+  .rem-item .rm-icon{width:30px;height:30px;border-radius:50%;background:var(--surface);
+    display:flex;align-items:center;justify-content:center;font-size:17px;color:var(--income);flex-shrink:0;}
+  .rem-item.overdue .rm-icon{color:var(--expense);}
+  .rem-item .rm-mid{flex:1;min-width:0;cursor:pointer;}
+  .rem-item .rm-name{font-size:14px;font-weight:700;color:var(--ink);}
+  .rem-item .rm-when{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+  .rem-item .rm-date{opacity:.8;}
+  .rem-item .rm-amt{margin-left:8px;font-weight:700;color:var(--ink);}
+  .rem-item .rm-done{flex-shrink:0;border:none;border-radius:9px;background:var(--surface);
+    color:var(--ink);font-size:12px;font-weight:700;font-family:inherit;padding:8px 12px;}
+
+  .rec-row{display:flex;align-items:center;gap:11px;background:var(--surface);border-radius:10px;
+    padding:10px 12px;margin-bottom:6px;box-shadow:0 1px 2px rgba(60,50,40,.05);cursor:pointer;}
+  html.dark .rec-row{border:1px solid #2C3C28;}
+  .rec-row .rc-day{width:40px;height:40px;border-radius:10px;background:var(--field-bg);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-size:16px;font-weight:700;flex-shrink:0;line-height:1;}
+  .rec-row .rc-day span{font-size:9px;font-weight:400;color:var(--ink-soft);margin-top:1px;}
+  .rec-row .rc-day.due{background:var(--income-soft);color:var(--income);}
+  .rec-row .rc-day.overdue{background:var(--expense-soft);color:var(--expense);}
+  .rec-row .rc-mid{flex:1;min-width:0;}
+  .rec-row .rc-name{font-size:15px;font-weight:600;}
+  .rec-row .rc-off{font-size:10px;color:var(--ink-soft);margin-left:6px;font-weight:400;}
+  .rec-row .rc-sub{font-size:11px;color:var(--ink-soft);margin-top:2px;}
+  .rec-row .rc-amt{font-size:15px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  .rec-row .rc-amt.income{color:var(--income);}
+
   .nospend-btn{width:100%;border:1px solid var(--line);background:var(--field-bg);color:var(--ink);
     border-radius:11px;padding:12px;font-size:14px;font-weight:600;font-family:inherit;
     display:flex;align-items:center;justify-content:center;gap:7px;margin:8px 0 2px;}
@@ -1925,6 +1956,273 @@ function CalcInput({value, onChange}){
         <button type="button" className="calc-key eq" onClick={()=>press("=")}>＝</button>
         <button type="button" className="calc-key wide" onClick={()=>press("0")}>0</button>
         <button type="button" className="calc-key wide" onClick={()=>press(".")}>.</button>
+      </div>
+    </div>
+  );
+}
+
+function FixedIncomeModal({initial, categories, accounts, onSave, onDelete, onClose}){
+  const [name, setName] = useState((initial&&initial.name)||"");
+  const [day, setDay] = useState(initial?String(initial.day||1):"1");
+  const [amount, setAmount] = useState(initial?String(initial.amount||""):"");
+  const [categoryId, setCategoryId] = useState((initial&&initial.categoryId)||"");
+  const [accountId, setAccountId] = useState((initial&&initial.accountId)||(accounts[0]?accounts[0].id:""));
+  const [counterpart, setCounterpart] = useState((initial&&initial.counterpart)||"");
+  const [startDate, setStartDate] = useState((initial&&initial.startDate)||toDateStr(new Date()));
+  const [active, setActive] = useState(initial?initial.active!==false:true);
+
+  function submit(){
+    if(!name.trim()){ alert("請輸入名稱"); return; }
+    const d = parseInt(day,10);
+    if(!(d>=1 && d<=31)){ alert("入帳日請填 1～31"); return; }
+    const n = Math.round(safeEval(amount));
+    if(!(n>0)){ alert("請輸入金額"); return; }
+    onSave({ name:name.trim(), day:d, amount:n, categoryId:categoryId||null,
+      accountId:accountId||null, counterpart:counterpart.trim(), startDate, active });
+  }
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>{initial?"編輯固定收入":"新增固定收入"}</h2>
+        <div className="field">
+          <label>名稱</label>
+          <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="例如：月薪" />
+        </div>
+        <div className="field">
+          <label>每月幾號入帳</label>
+          <input type="number" inputMode="numeric" value={day} onChange={e=>setDay(e.target.value)} placeholder="1" />
+        </div>
+        <div className="field">
+          <label>金額</label>
+          <input type="number" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="會自動記這個金額，之後可以改" />
+        </div>
+        <div className="field">
+          <label>分類</label>
+          <select value={categoryId} onChange={e=>setCategoryId(e.target.value)}>
+            <option value="">（未分類）</option>
+            {categoryOptionGroups(categories, "income")}
+          </select>
+        </div>
+        <div className="field">
+          <label>入哪個帳戶</label>
+          <select value={accountId} onChange={e=>setAccountId(e.target.value)}>{accountSelectGroups(accounts)}</select>
+        </div>
+        <div className="field">
+          <label>收自（選填）</label>
+          <input type="text" value={counterpart} onChange={e=>setCounterpart(e.target.value)} placeholder="例如：新莊地政" />
+        </div>
+        <div className="field">
+          <label>從哪天開始</label>
+          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} />
+        </div>
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--ink-soft)",margin:"4px 0 10px"}}>
+          <input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)} style={{width:16,height:16}} />
+          啟用（取消後不再自動記帳）
+        </label>
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>儲存</button>
+        </div>
+        {initial &&
+          <button className="btn danger" style={{width:"100%",marginTop:8}}
+            onClick={()=>{ if(confirm("確定刪除「"+initial.name+"」？已經記過的交易會保留。")) onDelete(initial.id); }}>
+            刪除
+          </button>
+        }
+      </div>
+    </div>
+  );
+}
+
+function RecurringSection({fixedIncomes, reminders, categories, accounts,
+  onAddIncome, onEditIncome, onDeleteIncome,
+  onAddReminder, onEditReminder, onDeleteReminder}){
+  const [incModal, setIncModal] = useState(null);
+  const [remModal, setRemModal] = useState(null);
+  const today = new Date();
+
+  return (
+    <div>
+      <div className="acc-section">
+        <div className="acc-section-title">
+          <h3>💰 固定收入</h3>
+          <button onClick={()=>setIncModal({})}>＋ 新增</button>
+        </div>
+        {(fixedIncomes||[]).length===0 &&
+          <div className="empty-hint">像月薪、加班費這種每月固定入帳的，設定好就會自動記帳</div>}
+        {(fixedIncomes||[]).slice().sort((a,b)=>(a.day||0)-(b.day||0)).map(f=>(
+          <div className="rec-row" key={f.id} onClick={()=>setIncModal({initial:f})}>
+            <div className="rc-day">{f.day}<span>號</span></div>
+            <div className="rc-mid">
+              <div className="rc-name">{f.name}{f.active===false && <span className="rc-off">已停用</span>}</div>
+              <div className="rc-sub">
+                {(accounts.find(a=>a.id===f.accountId)||{}).name || "未指定帳戶"}
+              </div>
+            </div>
+            <div className="rc-amt income">+{fmtMoney(f.amount)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="acc-section">
+        <div className="acc-section-title">
+          <h3>🔔 繳費提醒</h3>
+          <button onClick={()=>setRemModal({})}>＋ 新增</button>
+        </div>
+        {(reminders||[]).length===0 &&
+          <div className="empty-hint">像卡費、保費這種每月要繳的，設定後會在首頁提醒你</div>}
+        {(reminders||[]).slice().sort((a,b)=>(a.day||0)-(b.day||0)).map(r=>{
+          const st = reminderStatus(r, today);
+          return (
+            <div className="rec-row" key={r.id} onClick={()=>setRemModal({initial:r})}>
+              <div className={"rc-day"+(st?(st.overdue?" overdue":" due"):"")}>{r.day}<span>號</span></div>
+              <div className="rc-mid">
+                <div className="rc-name">{r.name}{r.active===false && <span className="rc-off">已停用</span>}</div>
+                <div className="rc-sub">
+                  {r.paidUntil ? "已繳到 "+r.paidUntil.slice(5) : "尚未標記繳納"}
+                  ・提前 {r.leadDays==null?5:r.leadDays} 天提醒
+                </div>
+              </div>
+              {r.amount>0 && <div className="rc-amt">{fmtMoney(r.amount)}</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      {incModal &&
+        <FixedIncomeModal initial={incModal.initial} categories={categories} accounts={accounts}
+          onClose={()=>setIncModal(null)}
+          onDelete={(id)=>{ onDeleteIncome(id); setIncModal(null); }}
+          onSave={(data)=>{
+            if(incModal.initial) onEditIncome(incModal.initial.id, data);
+            else onAddIncome(data);
+            setIncModal(null);
+          }} />
+      }
+      {remModal &&
+        <ReminderModal initial={remModal.initial} accounts={accounts}
+          onClose={()=>setRemModal(null)}
+          onDelete={(id)=>{ onDeleteReminder(id); setRemModal(null); }}
+          onSave={(data)=>{
+            if(remModal.initial) onEditReminder(remModal.initial.id, data);
+            else onAddReminder(data);
+            setRemModal(null);
+          }} />
+      }
+    </div>
+  );
+}
+
+/* ── 繳費提醒 ──
+   每月固定某一號要繳的東西（卡費、保費…）。
+   paidUntil 記錄「已經繳到哪一期」，按下已繳納就把它推進到這一期，提醒自動消失。 */
+function reminderDueDate(rem, today){
+  const day = Math.min(Math.max(+rem.day||1, 1), 31);
+  function dateOf(y, m){
+    const last = new Date(y, m+1, 0).getDate();
+    return new Date(y, m, Math.min(day, last));
+  }
+  let d = dateOf(today.getFullYear(), today.getMonth());
+  /* 這個月的已經繳過了，就看下個月 */
+  if(rem.paidUntil && toDateStr(d) <= rem.paidUntil){
+    d = dateOf(today.getFullYear(), today.getMonth()+1);
+  }
+  return d;
+}
+/* 回傳 null 表示現在不用提醒 */
+function reminderStatus(rem, today){
+  if(rem.active===false) return null;
+  const due = reminderDueDate(rem, today);
+  const dueStr = toDateStr(due);
+  const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const days = Math.round((due - t0) / 86400000);
+  const lead = rem.leadDays==null ? 5 : +rem.leadDays;
+  if(days > lead) return null;                    // 還沒到提醒區間
+  return { dueStr, days, overdue: days < 0 };
+}
+
+function ReminderBanner({reminders, onPaid, onOpen}){
+  const today = new Date();
+  const due = (reminders||[])
+    .map(r=>({ rem:r, st:reminderStatus(r, today) }))
+    .filter(x=>x.st)
+    .sort((a,b)=>a.st.days-b.st.days);
+  if(!due.length) return null;
+  return (
+    <div className="rem-banner">
+      {due.map(({rem, st})=>(
+        <div key={rem.id} className={"rem-item"+(st.overdue?" overdue":"")}>
+          <div className="rm-icon"><i className={st.overdue?"ph ph-warning-circle":"ph ph-bell-ringing"}></i></div>
+          <div className="rm-mid" onClick={()=>onOpen&&onOpen(rem)}>
+            <div className="rm-name">{rem.name}</div>
+            <div className="rm-when">
+              {st.overdue ? "已逾期 "+Math.abs(st.days)+" 天"
+                : st.days===0 ? "今天要繳"
+                : st.days+" 天後要繳"}
+              <span className="rm-date">・{st.dueStr.slice(5)}</span>
+              {rem.amount>0 && <span className="rm-amt">{fmtMoney(rem.amount)}</span>}
+            </div>
+          </div>
+          <button className="rm-done" onClick={()=>onPaid(rem, st.dueStr)}>已繳納</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReminderModal({initial, accounts, onSave, onDelete, onClose}){
+  const [name, setName] = useState((initial&&initial.name)||"");
+  const [day, setDay] = useState(initial?String(initial.day||15):"15");
+  const [amount, setAmount] = useState(initial&&initial.amount?String(initial.amount):"");
+  const [leadDays, setLeadDays] = useState(initial&&initial.leadDays!=null?String(initial.leadDays):"5");
+  const [active, setActive] = useState(initial?initial.active!==false:true);
+  function submit(){
+    if(!name.trim()){ alert("請輸入名稱"); return; }
+    const d = parseInt(day,10);
+    if(!(d>=1 && d<=31)){ alert("繳費日請填 1～31"); return; }
+    onSave({
+      name:name.trim(), day:d,
+      amount: amount.trim()? Math.round(safeEval(amount)) : 0,
+      leadDays: Math.max(0, parseInt(leadDays,10)||0),
+      active,
+    });
+  }
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={e=>e.stopPropagation()}>
+        <div className="sheet-handle"></div>
+        <h2>{initial?"編輯提醒":"新增繳費提醒"}</h2>
+        <div className="field">
+          <label>名稱</label>
+          <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="例如：星展卡費" />
+        </div>
+        <div className="field">
+          <label>每月幾號要繳</label>
+          <input type="number" inputMode="numeric" value={day} onChange={e=>setDay(e.target.value)} placeholder="15" />
+        </div>
+        <div className="field">
+          <label>金額（選填，會顯示在提醒上）</label>
+          <input type="number" inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="留空就不顯示" />
+        </div>
+        <div className="field">
+          <label>提前幾天提醒</label>
+          <input type="number" inputMode="numeric" value={leadDays} onChange={e=>setLeadDays(e.target.value)} placeholder="5" />
+        </div>
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"var(--ink-soft)",margin:"4px 0 10px"}}>
+          <input type="checkbox" checked={active} onChange={e=>setActive(e.target.checked)} style={{width:16,height:16}} />
+          啟用這個提醒
+        </label>
+        <div className="btn-row">
+          <button className="btn ghost" onClick={onClose}>取消</button>
+          <button className="btn primary" onClick={submit}>儲存</button>
+        </div>
+        {initial &&
+          <button className="btn danger" style={{width:"100%",marginTop:8}}
+            onClick={()=>{ if(confirm("確定刪除「"+initial.name+"」？")) onDelete(initial.id); }}>
+            刪除提醒
+          </button>
+        }
       </div>
     </div>
   );
@@ -5402,7 +5700,9 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
   onAddInvestment, onEditInvestment, onDeleteInvestment,
   onAddSubscription, onEditSubscription, onDeleteSubscription,
   onAddWishlist, onEditWishlist, onDeleteWishlist, onAddTx, onPayCard,
-  piggy, onAddPiggy, onDeletePiggy}){
+  piggy, onAddPiggy, onDeletePiggy,
+  fixedIncomes, onAddFixedIncome, onEditFixedIncome, onDeleteFixedIncome,
+  reminders, onAddReminder, onEditReminder, onDeleteReminder}){
   const [mode, setMode] = useState("account");
   const [masked, setMasked] = useState(()=>{
     try{ return localStorage.getItem("grove_default_masked")!=="false"; }
@@ -5451,6 +5751,7 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
         <button className={mode==="account"?"active":""} onClick={()=>setMode("account")}>帳戶</button>
         <button className={mode==="invest"?"active":""} onClick={()=>setMode("invest")}>投資</button>
         <button className={mode==="piggy"?"active":""} onClick={()=>setMode("piggy")}>撲滿</button>
+        <button className={mode==="recurring"?"active":""} onClick={()=>setMode("recurring")}>定期</button>
         <button className={mode==="subscription"?"active":""} onClick={()=>setMode("subscription")}>訂閱</button>
         <button className={mode==="wish"?"active":""} onClick={()=>setMode("wish")}>願望</button>
       </div>
@@ -5458,6 +5759,12 @@ function SettingsTab({categories, accounts, transactions, investments, subscript
         <AccountsSection accounts={accounts} transactions={transactions} categories={categories} onViewTx={onViewTx}
           onAddAccount={onAddAccount} onEditAccount={onEditAccount} onDeleteAccount={onDeleteAccount} onReorderGroup={onReorderGroup}
           onPayCard={onPayCard} />
+      }
+      {mode==="recurring" &&
+        <RecurringSection fixedIncomes={fixedIncomes} reminders={reminders}
+          categories={categories} accounts={accounts}
+          onAddIncome={onAddFixedIncome} onEditIncome={onEditFixedIncome} onDeleteIncome={onDeleteFixedIncome}
+          onAddReminder={onAddReminder} onEditReminder={onEditReminder} onDeleteReminder={onDeleteReminder} />
       }
       {mode==="subscription" &&
         <SubscriptionsSection subscriptions={subscriptions||[]} categories={categories} accounts={accounts}
@@ -5561,6 +5868,8 @@ function App(){
   const [budgets, setBudgets] = useState([]);
   const [checkins, setCheckins] = useState([]);   // 「今天沒花錢」的打卡紀錄
   const [piggy, setPiggy] = useState([]);         // 撲滿：忍住的消費與投入紀錄
+  const [fixedIncomes, setFixedIncomes] = useState([]);  // 固定收入：每月某號自動入帳
+  const [reminders, setReminders] = useState([]);        // 繳費提醒
   const [accounts, setAccounts] = useState([]);
   const [investments, setInvestments] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
@@ -5624,6 +5933,20 @@ function App(){
   }, []);
 
   useEffect(()=>{
+    const unsub = onSnapshot(collection(db,"fixedIncomes"), snap=>{
+      setFixedIncomes(snap.docs.map(d=>({id:d.id, ...d.data()})));
+    });
+    return unsub;
+  }, []);
+
+  useEffect(()=>{
+    const unsub = onSnapshot(collection(db,"reminders"), snap=>{
+      setReminders(snap.docs.map(d=>({id:d.id, ...d.data()})));
+    });
+    return unsub;
+  }, []);
+
+  useEffect(()=>{
     const unsub = onSnapshot(collection(db,"piggy"), snap=>{
       setPiggy(snap.docs.map(d=>({id:d.id, ...d.data()})));
     });
@@ -5670,6 +5993,24 @@ function App(){
     return unsub;
   }, []);
 
+  /* 固定收入：每月某一號入帳。
+     遇到該月沒有那一天（例如設 31 號但二月只有 28 天）就取當月最後一天。 */
+  function incomePayDates(inc, today){
+    if(!inc.startDate || !(inc.day>=1 && inc.day<=31)) return [];
+    const start = fromDateStr(inc.startDate);
+    const dates = [];
+    let cur = new Date(start.getFullYear(), start.getMonth(), 1);
+    let guard = 0;
+    while(guard++ < 600){
+      const lastDay = new Date(cur.getFullYear(), cur.getMonth()+1, 0).getDate();
+      const d = new Date(cur.getFullYear(), cur.getMonth(), Math.min(inc.day, lastDay));
+      if(d > today) break;
+      if(d >= start) dates.push(toDateStr(d));
+      cur.setMonth(cur.getMonth()+1);
+    }
+    return dates;
+  }
+
   function subBillingDates(sub, today){
     // 從 startDate 往後算，到今天為止所有到期的扣款日
     const start = fromDateStr(sub.startDate);
@@ -5699,6 +6040,37 @@ function App(){
       }
     }
     return dates;
+  }
+
+  /* 固定收入到日子就自動記一筆。金額先帶預設值，實際入帳金額不同時再去改那筆。 */
+  const generatingIncRef = useRef(false);
+  async function generateDueIncomes(){
+    if(generatingIncRef.current) return;
+    const actives = (fixedIncomes||[]).filter(f=>f.active!==false && f.startDate && f.amount>0);
+    if(actives.length===0) return;
+    generatingIncRef.current = true;
+    try{
+      const today = new Date();
+      const batch = writeBatch(db);
+      let any = false;
+      actives.forEach(inc=>{
+        incomePayDates(inc, today).forEach(ds=>{
+          const exists = transactions.some(t=>t.autoIncome===inc.id && t.date===ds);
+          if(exists) return;
+          const ref = doc(collection(db,"transactions"));
+          batch.set(ref,{
+            type:"income", amount:inc.amount,
+            categoryId: inc.categoryId||null,
+            accountId: inc.accountId||null,
+            date:ds, note:inc.name,
+            counterpart: inc.counterpart||"",
+            autoIncome:inc.id, createdAt:Date.now(),
+          });
+          any = true;
+        });
+      });
+      if(any) await batch.commit();
+    }finally{ generatingIncRef.current = false; }
   }
 
   const generatingSubRef = useRef(false);
@@ -5743,6 +6115,7 @@ function App(){
     }finally{ generatingSubRef.current = false; }
   }
   useEffect(()=>{ generateDueSubscriptions(); }, [subscriptions, transactions, categories]);
+  useEffect(()=>{ generateDueIncomes(); }, [fixedIncomes, transactions]);
   const generatingInterestRef = useRef(false);
   async function generateDueInterest(){
     if(generatingInterestRef.current) return;
@@ -5817,6 +6190,22 @@ function App(){
   }
   /* 「今天沒花錢」打卡：再按一次就取消。
      那天若已經有真的記帳，就不需要打卡，直接忽略。 */
+  async function addFixedIncome(data){ await addDoc(collection(db,"fixedIncomes"), {...data, createdAt:Date.now()}); }
+  async function editFixedIncome(id,data){ await updateDoc(doc(db,"fixedIncomes",id), data); }
+  async function deleteFixedIncome(id){ await deleteDoc(doc(db,"fixedIncomes",id)); }
+
+  /* 按下「已繳納」：把 paidUntil 推到這一期，提醒就會消失，
+     下個月到期前再自動出現。 */
+  async function markReminderPaid(rem, dueStr){
+    try{
+      await updateDoc(doc(db,"reminders",rem.id), { paidUntil: dueStr });
+      flash("已標記繳納");
+    }catch(e){ alert("更新失敗："+e.message); }
+  }
+  async function addReminder(data){ await addDoc(collection(db,"reminders"), {...data, createdAt:Date.now()}); }
+  async function editReminder(id,data){ await updateDoc(doc(db,"reminders",id), data); }
+  async function deleteReminder(id){ await deleteDoc(doc(db,"reminders",id)); }
+
   async function addPiggy(data){
     try{
       await addDoc(collection(db,"piggy"), {...data, createdAt:Date.now()});
@@ -6085,6 +6474,9 @@ function App(){
       <div className="content">
         {tab==="home" &&
           <div {...monthSwipe}>
+            <ReminderBanner reminders={reminders}
+              onPaid={markReminderPaid}
+              onOpen={()=>{ setTab("settings"); }} />
             <div className="mode-toggle">
               <button className={homeMode==="list"?"active":""} onClick={()=>setHomeMode("list")}>收支清冊</button>
               <button className={homeMode==="calendar"?"active":""} onClick={()=>setHomeMode("calendar")}>日曆</button>
@@ -6114,6 +6506,8 @@ function App(){
             onAddSubscription={addSubscription} onEditSubscription={editSubscription} onDeleteSubscription={deleteSubscription}
             wishlists={wishlists} onAddWishlist={addWishlist} onEditWishlist={editWishlist} onDeleteWishlist={deleteWishlist}
             piggy={piggy} onAddPiggy={addPiggy} onDeletePiggy={deletePiggy}
+            fixedIncomes={fixedIncomes} onAddFixedIncome={addFixedIncome} onEditFixedIncome={editFixedIncome} onDeleteFixedIncome={deleteFixedIncome}
+            reminders={reminders} onAddReminder={addReminder} onEditReminder={editReminder} onDeleteReminder={deleteReminder}
             onAddTx={saveTx} onPayCard={payCard} />
         }
       </div>
