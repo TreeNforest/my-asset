@@ -625,6 +625,7 @@
   .rem-item .rm-amt{margin-left:8px;font-weight:700;color:var(--ink);}
   .rem-item .rm-done{flex-shrink:0;border:none;border-radius:9px;background:var(--surface);
     color:var(--ink);font-size:12px;font-weight:700;font-family:inherit;padding:8px 12px;}
+  .rem-err{font-size:12px;color:var(--warn);padding:2px 4px;line-height:1.4;}
 
   .rec-row{display:flex;align-items:center;gap:11px;background:var(--surface);border-radius:10px;
     padding:10px 12px;margin-bottom:6px;box-shadow:0 1px 2px rgba(60,50,40,.05);cursor:pointer;}
@@ -2144,11 +2145,27 @@ function reminderStatus(rem, today){
 
 function ReminderBanner({reminders, onPaid, onOpen}){
   const today = new Date();
+  /* 按下已繳納先在畫面上收起來，不等 Firestore 回來；
+     萬一寫入失敗再放回去，並把錯誤顯示出來。 */
+  const [justPaid, setJustPaid] = useState({});
+  const [err, setErr] = useState("");
+
+  async function handlePaid(rem, dueStr){
+    setJustPaid(p=>({...p, [rem.id]:true}));
+    setErr("");
+    try{
+      await onPaid(rem, dueStr);
+    }catch(e){
+      setJustPaid(p=>{ const n={...p}; delete n[rem.id]; return n; });
+      setErr("「"+rem.name+"」標記失敗："+(e&&e.message||e));
+    }
+  }
+
   const due = (reminders||[])
     .map(r=>({ rem:r, st:reminderStatus(r, today) }))
-    .filter(x=>x.st)
+    .filter(x=>x.st && !justPaid[x.rem.id])
     .sort((a,b)=>a.st.days-b.st.days);
-  if(!due.length) return null;
+  if(!due.length && !err) return null;
   return (
     <div className="rem-banner">
       {due.map(({rem, st})=>(
@@ -2164,9 +2181,10 @@ function ReminderBanner({reminders, onPaid, onOpen}){
               {rem.amount>0 && <span className="rm-amt">{fmtMoney(rem.amount)}</span>}
             </div>
           </div>
-          <button className="rm-done" onClick={()=>onPaid(rem, st.dueStr)}>已繳納</button>
+          <button className="rm-done" onClick={()=>handlePaid(rem, st.dueStr)}>已繳納</button>
         </div>
       ))}
+      {err && <div className="rem-err">{err}</div>}
     </div>
   );
 }
@@ -6197,10 +6215,10 @@ function App(){
   /* 按下「已繳納」：把 paidUntil 推到這一期，提醒就會消失，
      下個月到期前再自動出現。 */
   async function markReminderPaid(rem, dueStr){
-    try{
-      await updateDoc(doc(db,"reminders",rem.id), { paidUntil: dueStr });
-      flash("已標記繳納");
-    }catch(e){ alert("更新失敗："+e.message); }
+    /* 錯誤不在這裡吞掉，往外拋給橫幅處理：
+       它會把畫面復原並顯示原因，比跳一個 alert 更清楚 */
+    await updateDoc(doc(db,"reminders",rem.id), { paidUntil: dueStr });
+    flash("已標記繳納");
   }
   async function addReminder(data){ await addDoc(collection(db,"reminders"), {...data, createdAt:Date.now()}); }
   async function editReminder(id,data){ await updateDoc(doc(db,"reminders",id), data); }
